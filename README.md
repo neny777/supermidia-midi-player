@@ -30,8 +30,11 @@ O player já permite:
 - extrair letras incorporadas em eventos `Lyric` de MIDI e `Text` de KAR;
 - acompanhar linha anterior, atual e próxima usando o relógio do sequenciador;
 - exibir a letra completa em uma área separada da interface.
+- analisar os 16 canais, nomes de pista, instrumentos GM e volumes originais;
+- controlar volume, Mute e Solo por canal em bancos 1–8 e 9–16;
+- visualizar atividade MIDI e restaurar a mixagem original da música.
 
-O mixer por canal, a saída de letras para um segundo monitor e o mapeamento da SMC-Mixer serão implementados nas próximas etapas.
+A saída de letras para um segundo monitor, os perfis de mixagem por música e o mapeamento da SMC-Mixer serão implementados nas próximas etapas.
 
 ## Executar
 

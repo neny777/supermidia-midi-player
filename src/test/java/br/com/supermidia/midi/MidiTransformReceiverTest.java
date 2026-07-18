@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MidiTransformReceiverTest {
     @Test
@@ -55,6 +57,74 @@ class MidiTransformReceiverTest {
         assertEquals(50, result.getData2());
     }
 
+    @Test
+    void channelVolumeOverrideTakesPriorityOverTheFileVolume()
+            throws InvalidMidiDataException {
+        RecordingReceiver output = new RecordingReceiver();
+        MidiTransformReceiver receiver = new MidiTransformReceiver(output);
+        receiver.setMasterVolume(0.8);
+        receiver.setChannelVolume(3, 50);
+        output.clear();
+
+        receiver.send(message(ShortMessage.CONTROL_CHANGE, 3, 7, 110), -1);
+
+        assertEquals(40, output.shortMessage(0).getData2());
+    }
+
+    @Test
+    void muteBlocksOnlyTheSelectedChannelAndTracksItsActivity()
+            throws InvalidMidiDataException {
+        RecordingReceiver output = new RecordingReceiver();
+        MidiTransformReceiver receiver = new MidiTransformReceiver(output);
+        receiver.setChannelMuted(1, true);
+        output.clear();
+
+        receiver.send(message(ShortMessage.NOTE_ON, 1, 60, 100), -1);
+        receiver.send(message(ShortMessage.NOTE_ON, 2, 64, 100), -1);
+
+        assertEquals(1, output.size());
+        assertEquals(2, output.shortMessage(0).getChannel());
+        assertTrue(receiver.isChannelActive(1, 1_000));
+        assertFalse(receiver.isChannelActive(3, 1_000));
+    }
+
+    @Test
+    void soloBlocksEveryChannelExceptTheSoloSelection()
+            throws InvalidMidiDataException {
+        RecordingReceiver output = new RecordingReceiver();
+        MidiTransformReceiver receiver = new MidiTransformReceiver(output);
+        receiver.setChannelSolo(4, true);
+        output.clear();
+
+        receiver.send(message(ShortMessage.NOTE_ON, 3, 60, 100), -1);
+        receiver.send(message(ShortMessage.NOTE_ON, 4, 64, 100), -1);
+
+        assertEquals(1, output.size());
+        assertEquals(4, output.shortMessage(0).getChannel());
+    }
+
+    @Test
+    void resetMixerClearsOverridesMuteAndSolo()
+            throws InvalidMidiDataException {
+        RecordingReceiver output = new RecordingReceiver();
+        MidiTransformReceiver receiver = new MidiTransformReceiver(output);
+        receiver.setChannelVolume(0, 20);
+        receiver.setChannelMuted(0, true);
+        receiver.setChannelSolo(3, true);
+        int[] originalVolumes = new int[16];
+        java.util.Arrays.fill(originalVolumes, 100);
+        originalVolumes[0] = 90;
+
+        receiver.resetMixer(originalVolumes);
+        output.clear();
+        receiver.send(message(ShortMessage.CONTROL_CHANGE, 0, 7, 110), -1);
+        receiver.send(message(ShortMessage.NOTE_ON, 0, 60, 100), -1);
+
+        assertEquals(2, output.size());
+        assertEquals(110, output.shortMessage(0).getData2());
+        assertEquals(ShortMessage.NOTE_ON, output.shortMessage(1).getCommand());
+    }
+
     private static ShortMessage message(int command, int channel, int data1, int data2)
             throws InvalidMidiDataException {
         ShortMessage message = new ShortMessage();
@@ -80,6 +150,10 @@ class MidiTransformReceiverTest {
 
         void clear() {
             messages.clear();
+        }
+
+        int size() {
+            return messages.size();
         }
     }
 }

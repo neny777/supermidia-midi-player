@@ -14,6 +14,9 @@ out/
 hs_err_pid*
 replay_pid*
 
+# Local repertoire (never publish performance files)
+midis/
+
 # Operating-system metadata
 .DS_Store
 Thumbs.db

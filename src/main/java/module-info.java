@@ -7,6 +7,7 @@ module br.com.supermidia {
     exports br.com.supermidia.core;
     exports br.com.supermidia.midi;
     exports br.com.supermidia.lyrics;
+    exports br.com.supermidia.mixer;
     exports br.com.supermidia.playlist;
 
     opens br.com.supermidia.app to javafx.fxml;

@@ -17,7 +17,11 @@ public final class MidiTransformReceiver implements Receiver {
 
     private final Receiver delegate;
     private final int[][] activeOutputNotes = new int[MIDI_CHANNELS][MIDI_NOTES];
-    private final int[] channelVolumes = new int[MIDI_CHANNELS];
+    private final int[] sourceVolumes = new int[MIDI_CHANNELS];
+    private final int[] volumeOverrides = new int[MIDI_CHANNELS];
+    private final boolean[] mutedChannels = new boolean[MIDI_CHANNELS];
+    private final boolean[] soloChannels = new boolean[MIDI_CHANNELS];
+    private final long[] lastActivityNanos = new long[MIDI_CHANNELS];
 
     private int transpose;
     private double masterVolume = 1.0;
@@ -28,7 +32,8 @@ public final class MidiTransformReceiver implements Receiver {
         for (int[] channel : activeOutputNotes) {
             Arrays.fill(channel, -1);
         }
-        Arrays.fill(channelVolumes, 100);
+        Arrays.fill(sourceVolumes, 100);
+        Arrays.fill(volumeOverrides, -1);
     }
 
     @Override
@@ -47,7 +52,10 @@ public final class MidiTransformReceiver implements Receiver {
         int data2 = shortMessage.getData2();
 
         if (command == ShortMessage.NOTE_ON && data2 > 0) {
-            sendNoteOn(channel, data1, data2, timeStamp);
+            lastActivityNanos[channel] = System.nanoTime();
+            if (!isEffectivelyMuted(channel)) {
+                sendNoteOn(channel, data1, data2, timeStamp);
+            }
             return;
         }
         if (command == ShortMessage.NOTE_OFF
@@ -56,8 +64,8 @@ public final class MidiTransformReceiver implements Receiver {
             return;
         }
         if (command == ShortMessage.CONTROL_CHANGE && data1 == CHANNEL_VOLUME) {
-            channelVolumes[channel] = data2;
-            sendShortMessage(command, channel, data1, scaledVolume(data2), timeStamp);
+            sourceVolumes[channel] = data2;
+            sendChannelVolume(channel, timeStamp);
             return;
         }
 
@@ -75,15 +83,57 @@ public final class MidiTransformReceiver implements Receiver {
     public synchronized void setMasterVolume(double factor) {
         masterVolume = Math.max(0.0, Math.min(1.0, factor));
         for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
-            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, CHANNEL_VOLUME,
-                    scaledVolume(channelVolumes[channel]), -1);
+            sendChannelVolume(channel, -1);
+        }
+    }
+
+    public synchronized void setChannelVolume(int channel, int volume) {
+        requireChannel(channel);
+        volumeOverrides[channel] = Math.max(0, Math.min(127, volume));
+        sendChannelVolume(channel, -1);
+    }
+
+    public synchronized void setChannelMuted(int channel, boolean muted) {
+        requireChannel(channel);
+        boolean[] previousState = effectiveMuteState();
+        mutedChannels[channel] = muted;
+        silenceNewlyMutedChannels(previousState);
+    }
+
+    public synchronized void setChannelSolo(int channel, boolean solo) {
+        requireChannel(channel);
+        boolean[] previousState = effectiveMuteState();
+        soloChannels[channel] = solo;
+        silenceNewlyMutedChannels(previousState);
+    }
+
+    public synchronized boolean isChannelActive(int channel, long activityWindowMillis) {
+        requireChannel(channel);
+        long lastActivity = lastActivityNanos[channel];
+        return lastActivity > 0
+                && System.nanoTime() - lastActivity <= activityWindowMillis * 1_000_000L;
+    }
+
+    public synchronized void resetMixer(int[] originalVolumes) {
+        if (originalVolumes.length != MIDI_CHANNELS) {
+            throw new IllegalArgumentException("A mixagem deve conter 16 canais");
+        }
+        silence();
+        for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
+            sourceVolumes[channel] = Math.max(0, Math.min(127, originalVolumes[channel]));
+        }
+        Arrays.fill(volumeOverrides, -1);
+        Arrays.fill(mutedChannels, false);
+        Arrays.fill(soloChannels, false);
+        Arrays.fill(lastActivityNanos, 0);
+        for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
+            sendChannelVolume(channel, -1);
         }
     }
 
     public synchronized void silence() {
         for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
-            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, ALL_NOTES_OFF, 0, -1);
-            Arrays.fill(activeOutputNotes[channel], -1);
+            silenceChannel(channel);
         }
     }
 
@@ -112,9 +162,20 @@ public final class MidiTransformReceiver implements Receiver {
 
     private void sendNoteOff(int command, int channel, int inputNote, int velocity, long timeStamp) {
         int mappedNote = activeOutputNotes[channel][inputNote];
+        if (mappedNote < 0 && isEffectivelyMuted(channel)) {
+            return;
+        }
         int outputNote = mappedNote >= 0 ? mappedNote : transposedNote(channel, inputNote);
         activeOutputNotes[channel][inputNote] = -1;
         sendShortMessage(command, channel, outputNote, velocity, timeStamp);
+    }
+
+    private void sendChannelVolume(int channel, long timeStamp) {
+        int sourceVolume = volumeOverrides[channel] >= 0
+                ? volumeOverrides[channel] : sourceVolumes[channel];
+        int scaledVolume = (int) Math.round(sourceVolume * masterVolume);
+        sendShortMessage(ShortMessage.CONTROL_CHANGE, channel,
+                CHANNEL_VOLUME, Math.max(0, Math.min(127, scaledVolume)), timeStamp);
     }
 
     private int transposedNote(int channel, int inputNote) {
@@ -124,8 +185,42 @@ public final class MidiTransformReceiver implements Receiver {
         return Math.max(0, Math.min(127, inputNote + transpose));
     }
 
-    private int scaledVolume(int sourceVolume) {
-        return (int) Math.round(sourceVolume * masterVolume);
+    private boolean isEffectivelyMuted(int channel) {
+        if (mutedChannels[channel]) {
+            return true;
+        }
+        boolean anySolo = false;
+        for (boolean solo : soloChannels) {
+            anySolo |= solo;
+        }
+        return anySolo && !soloChannels[channel];
+    }
+
+    private boolean[] effectiveMuteState() {
+        boolean[] state = new boolean[MIDI_CHANNELS];
+        for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
+            state[channel] = isEffectivelyMuted(channel);
+        }
+        return state;
+    }
+
+    private void silenceNewlyMutedChannels(boolean[] previousState) {
+        for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
+            if (!previousState[channel] && isEffectivelyMuted(channel)) {
+                silenceChannel(channel);
+            }
+        }
+    }
+
+    private void silenceChannel(int channel) {
+        sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, ALL_NOTES_OFF, 0, -1);
+        Arrays.fill(activeOutputNotes[channel], -1);
+    }
+
+    private void requireChannel(int channel) {
+        if (channel < 0 || channel >= MIDI_CHANNELS) {
+            throw new IllegalArgumentException("Canal MIDI fora do intervalo: " + channel);
+        }
     }
 
     private void sendShortMessage(int command, int channel, int data1, int data2, long timeStamp) {

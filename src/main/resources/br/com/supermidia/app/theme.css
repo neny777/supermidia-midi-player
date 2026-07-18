@@ -315,6 +315,92 @@
     -fx-text-fill: #8df5d5;
 }
 
+.bank-button {
+    -fx-background-color: #202938;
+    -fx-background-radius: 9;
+    -fx-text-fill: #aeb8c7;
+    -fx-font-weight: 700;
+    -fx-padding: 9 16;
+}
+
+.bank-button:selected {
+    -fx-background-color: #235b4e;
+    -fx-text-fill: #8df5d5;
+}
+
+.mixer-channels {
+    -fx-min-height: 390px;
+    -fx-padding: 4 0;
+}
+
+.mixer-channel-strip {
+    -fx-min-width: 92px;
+    -fx-background-color: #141b26;
+    -fx-border-color: #242e3d;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 12 9;
+}
+
+.mixer-unused-channel {
+    -fx-opacity: 0.48;
+}
+
+.mixer-channel-number {
+    -fx-text-fill: #63e6be;
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+}
+
+.mixer-track-name {
+    -fx-min-height: 38px;
+    -fx-text-fill: #edf2f7;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.mixer-instrument-name {
+    -fx-min-height: 34px;
+    -fx-text-fill: #8490a3;
+    -fx-font-size: 10px;
+}
+
+.mixer-volume-value {
+    -fx-text-fill: #dce3ec;
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.activity-dot {
+    -fx-text-fill: #334052;
+    -fx-font-size: 13px;
+}
+
+.activity-dot.mixer-active {
+    -fx-text-fill: #6ff0c9;
+}
+
+.mixer-state-button {
+    -fx-min-width: 34px;
+    -fx-background-color: #252f40;
+    -fx-background-radius: 7;
+    -fx-text-fill: #aeb8c7;
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-padding: 7 9;
+}
+
+.mute-button:selected {
+    -fx-background-color: #6b2833;
+    -fx-text-fill: #ffb0bc;
+}
+
+.solo-button:selected {
+    -fx-background-color: #665522;
+    -fx-text-fill: #ffe28a;
+}
+
 .transport-bar {
     -fx-background-color: #111722;
     -fx-border-color: #232c3b transparent transparent transparent;

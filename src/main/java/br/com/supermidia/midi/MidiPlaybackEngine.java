@@ -12,6 +12,7 @@ import javax.sound.midi.Transmitter;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -21,6 +22,10 @@ public final class MidiPlaybackEngine implements AutoCloseable {
 
     private final Sequencer sequencer;
     private final Transmitter transmitter;
+    private final int[] channelSourceVolumes = new int[16];
+    private final int[] channelVolumeOverrides = new int[16];
+    private final boolean[] mutedChannels = new boolean[16];
+    private final boolean[] soloChannels = new boolean[16];
 
     private MidiDevice outputDevice;
     private MidiTransformReceiver transformReceiver;
@@ -40,6 +45,8 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         sequencer.open();
         transmitter = sequencer.getTransmitter();
         sequencer.addMetaEventListener(this::handleMetaMessage);
+        Arrays.fill(channelSourceVolumes, 100);
+        Arrays.fill(channelVolumeOverrides, -1);
     }
 
     public List<MidiOutputDevice> listOutputDevices() {
@@ -75,6 +82,14 @@ public final class MidiPlaybackEngine implements AutoCloseable {
             MidiTransformReceiver transformed = new MidiTransformReceiver(receiver);
             transformed.setTranspose(transpose);
             transformed.setMasterVolume(masterVolume);
+            transformed.resetMixer(channelSourceVolumes);
+            for (int channel = 0; channel < 16; channel++) {
+                if (channelVolumeOverrides[channel] >= 0) {
+                    transformed.setChannelVolume(channel, channelVolumeOverrides[channel]);
+                }
+                transformed.setChannelMuted(channel, mutedChannels[channel]);
+                transformed.setChannelSolo(channel, soloChannels[channel]);
+            }
             transmitter.setReceiver(transformed);
             outputDevice = selectedDevice;
             transformReceiver = transformed;
@@ -99,7 +114,7 @@ public final class MidiPlaybackEngine implements AutoCloseable {
     public synchronized void unload() {
         stop();
         try {
-        sequencer.setSequence((Sequence) null);
+            sequencer.setSequence((Sequence) null);
         } catch (InvalidMidiDataException exception) {
             throw new IllegalStateException("Falha ao descarregar a sequência MIDI", exception);
         }
@@ -158,6 +173,50 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         if (transformReceiver != null) {
             transformReceiver.setMasterVolume(masterVolume);
         }
+    }
+
+    public synchronized void setChannelVolume(int channel, int volume) {
+        requireChannel(channel);
+        channelVolumeOverrides[channel] = Math.max(0, Math.min(127, volume));
+        if (transformReceiver != null) {
+            transformReceiver.setChannelVolume(channel, channelVolumeOverrides[channel]);
+        }
+    }
+
+    public synchronized void setChannelMuted(int channel, boolean muted) {
+        requireChannel(channel);
+        mutedChannels[channel] = muted;
+        if (transformReceiver != null) {
+            transformReceiver.setChannelMuted(channel, muted);
+        }
+    }
+
+    public synchronized void setChannelSolo(int channel, boolean solo) {
+        requireChannel(channel);
+        soloChannels[channel] = solo;
+        if (transformReceiver != null) {
+            transformReceiver.setChannelSolo(channel, solo);
+        }
+    }
+
+    public synchronized void resetChannelMix(int[] originalVolumes) {
+        if (originalVolumes.length != 16) {
+            throw new IllegalArgumentException("A mixagem deve conter 16 canais");
+        }
+        for (int channel = 0; channel < 16; channel++) {
+            channelSourceVolumes[channel] = Math.max(0, Math.min(127, originalVolumes[channel]));
+        }
+        Arrays.fill(channelVolumeOverrides, -1);
+        Arrays.fill(mutedChannels, false);
+        Arrays.fill(soloChannels, false);
+        if (transformReceiver != null) {
+            transformReceiver.resetMixer(channelSourceVolumes);
+        }
+    }
+
+    public synchronized boolean isChannelActive(int channel) {
+        requireChannel(channel);
+        return transformReceiver != null && transformReceiver.isChannelActive(channel, 220);
     }
 
     public synchronized void setPositionMicroseconds(long position) {
@@ -239,6 +298,12 @@ public final class MidiPlaybackEngine implements AutoCloseable {
     private void ensureSequenceLoaded() {
         if (sequencer.getSequence() == null) {
             throw new IllegalStateException("Nenhum arquivo MIDI foi carregado");
+        }
+    }
+
+    private void requireChannel(int channel) {
+        if (channel < 0 || channel >= 16) {
+            throw new IllegalArgumentException("Canal MIDI fora do intervalo: " + channel);
         }
     }
 }
