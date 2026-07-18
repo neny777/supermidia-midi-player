@@ -29,6 +29,8 @@ public final class MidiPlaybackEngine implements AutoCloseable {
     private int transpose;
     private double masterVolume = 0.8;
     private Runnable playbackFinishedHandler = () -> { };
+    private long sequenceGeneration;
+    private long finishedGeneration = -1;
 
     public MidiPlaybackEngine() throws MidiUnavailableException {
         sequencer = MidiSystem.getSequencer(false);
@@ -90,6 +92,20 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         sequencer.setSequence(sequence);
         sequencer.setTempoFactor(tempoFactor);
         loadedFile = file;
+        sequenceGeneration++;
+        finishedGeneration = -1;
+    }
+
+    public synchronized void unload() {
+        stop();
+        try {
+        sequencer.setSequence((Sequence) null);
+        } catch (InvalidMidiDataException exception) {
+            throw new IllegalStateException("Falha ao descarregar a sequência MIDI", exception);
+        }
+        loadedFile = null;
+        sequenceGeneration++;
+        finishedGeneration = -1;
     }
 
     public synchronized void play() {
@@ -100,6 +116,7 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         if (sequencer.getTickPosition() >= sequencer.getTickLength()) {
             sequencer.setTickPosition(0);
         }
+        finishedGeneration = -1;
         sequencer.start();
     }
 
@@ -204,7 +221,9 @@ public final class MidiPlaybackEngine implements AutoCloseable {
     private synchronized void handleMetaMessage(MetaMessage message) {
         if (message.getType() == END_OF_TRACK
                 && sequencer.getSequence() != null
-                && sequencer.getTickPosition() >= sequencer.getTickLength() - 1) {
+                && sequencer.getTickPosition() >= sequencer.getTickLength() - 1
+                && finishedGeneration != sequenceGeneration) {
+            finishedGeneration = sequenceGeneration;
             playbackFinishedHandler.run();
         }
     }

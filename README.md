@@ -23,8 +23,12 @@ O player já permite:
 - transpor notas melódicas entre -12 e +12 sem alterar o canal de bateria;
 - controlar o volume geral do acompanhamento;
 - enviar `All Sound Off` e `All Notes Off` com o botão Panic.
+- montar, remover e reordenar um repertório;
+- abrir e salvar playlists UTF-8 no formato `.m3u8`;
+- preparar a próxima música automaticamente no modo Manual;
+- iniciar a próxima música automaticamente no modo Automático.
 
-A playlist, as letras sincronizadas, o mixer por canal e o mapeamento da SMC-Mixer serão implementados nas próximas etapas.
+As letras sincronizadas, o mixer por canal e o mapeamento da SMC-Mixer serão implementados nas próximas etapas.
 
 ## Executar
 

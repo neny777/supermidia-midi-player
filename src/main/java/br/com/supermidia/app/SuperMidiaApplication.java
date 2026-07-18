@@ -26,6 +26,11 @@ public final class SuperMidiaApplication extends Application {
         stage.setMinWidth(1060);
         stage.setMinHeight(680);
         stage.setScene(scene);
+        stage.setOnCloseRequest(event -> {
+            if (!controller.confirmClose()) {
+                event.consume();
+            }
+        });
         stage.centerOnScreen();
         stage.show();
     }

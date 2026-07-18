@@ -218,6 +218,30 @@
     -fx-background-color: #82efd0;
 }
 
+.secondary-button {
+    -fx-background-color: #273143;
+    -fx-background-radius: 9;
+    -fx-text-fill: #dce3ec;
+    -fx-font-weight: 700;
+    -fx-padding: 10 14;
+}
+
+.secondary-button:hover {
+    -fx-background-color: #344056;
+}
+
+.danger-button {
+    -fx-background-color: #3c2025;
+    -fx-background-radius: 9;
+    -fx-text-fill: #ff9aa8;
+    -fx-font-weight: 700;
+    -fx-padding: 10 14;
+}
+
+.danger-button:hover {
+    -fx-background-color: #542831;
+}
+
 .panic-button {
     -fx-background-color: #3c2025;
     -fx-background-radius: 9;
@@ -279,6 +303,37 @@
     -fx-text-fill: #aeb8c7;
     -fx-font-family: "Consolas", monospace;
     -fx-font-size: 12px;
+}
+
+.playlist-list {
+    -fx-background-color: #111722;
+    -fx-border-color: #242e3d;
+    -fx-border-radius: 14;
+    -fx-background-radius: 14;
+    -fx-padding: 6;
+}
+
+.playlist-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 9;
+    -fx-text-fill: #c8d0dc;
+    -fx-font-size: 15px;
+    -fx-padding: 12 14;
+}
+
+.playlist-list .list-cell:hover {
+    -fx-background-color: #1a2330;
+}
+
+.playlist-list .list-cell:selected {
+    -fx-background-color: #283449;
+    -fx-text-fill: #f4f7fb;
+}
+
+.playlist-list .playlist-current-item {
+    -fx-background-color: #20332f;
+    -fx-text-fill: #73f0ca;
+    -fx-font-weight: 700;
 }
 
 .slider .track {

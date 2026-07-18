@@ -3,6 +3,9 @@ package br.com.supermidia.app;
 import br.com.supermidia.core.PlaybackMode;
 import br.com.supermidia.midi.MidiOutputDevice;
 import br.com.supermidia.midi.MidiPlaybackEngine;
+import br.com.supermidia.playlist.PlaylistFileService;
+import br.com.supermidia.playlist.PlaylistItem;
+import br.com.supermidia.playlist.PlaylistManager;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -10,11 +13,17 @@ import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.util.Duration;
 
@@ -22,78 +31,103 @@ import javax.sound.midi.InvalidMidiDataException;
 import javax.sound.midi.MidiUnavailableException;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 
 public final class MainController {
     @FXML
     private Label currentSongLabel;
-
     @FXML
     private Label currentSongHintLabel;
-
+    @FXML
+    private Label nextSongLabel;
+    @FXML
+    private Label nextSongHintLabel;
     @FXML
     private Label playbackModeLabel;
-
     @FXML
     private Label statusLabel;
-
     @FXML
     private Label transposeValueLabel;
-
     @FXML
     private Label speedValueLabel;
-
     @FXML
     private Label masterVolumeValueLabel;
-
     @FXML
     private Label currentTimeLabel;
-
     @FXML
     private Label durationTimeLabel;
-
     @FXML
     private Label midiOutputStatusLabel;
+    @FXML
+    private Label playlistFileLabel;
+    @FXML
+    private Label playlistCountLabel;
 
     @FXML
     private ComboBox<MidiOutputDevice> midiOutputComboBox;
+    @FXML
+    private ListView<PlaylistItem> playlistListView;
 
     @FXML
     private ToggleButton automaticModeToggle;
+    @FXML
+    private ToggleButton presentationNavButton;
+    @FXML
+    private ToggleButton playlistNavButton;
 
     @FXML
     private Slider transposeSlider;
-
     @FXML
     private Slider speedSlider;
-
     @FXML
     private Slider masterVolumeSlider;
-
     @FXML
     private Slider progressSlider;
 
     @FXML
     private Button playButton;
-
     @FXML
     private Button pauseButton;
-
     @FXML
     private Button stopButton;
-
+    @FXML
+    private Button previousButton;
+    @FXML
+    private Button nextButton;
     @FXML
     private Button panicButton;
+    @FXML
+    private Button savePlaylistButton;
+    @FXML
+    private Button moveUpButton;
+    @FXML
+    private Button moveDownButton;
+    @FXML
+    private Button removePlaylistButton;
+
+    @FXML
+    private ScrollPane presentationView;
+    @FXML
+    private VBox playlistView;
+
+    private final PlaylistManager playlist = new PlaylistManager();
+    private final PlaylistFileService playlistFileService = new PlaylistFileService();
 
     private PlaybackMode playbackMode = PlaybackMode.MANUAL;
     private MidiPlaybackEngine engine;
     private Timeline progressTimeline;
+    private Path currentPlaylistFile;
+    private boolean playlistDirty;
     private boolean refreshingOutputs;
 
     @FXML
     private void initialize() {
         configureControlListeners();
+        configurePlaylistView();
         refreshPlaybackMode();
+        refreshPlaylistView(-1);
 
         try {
             engine = new MidiPlaybackEngine();
@@ -121,43 +155,201 @@ public final class MainController {
         }
     }
 
+    public boolean confirmClose() {
+        if (!playlistDirty || playlist.isEmpty()) {
+            return true;
+        }
+        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
+                "A playlist possui alterações não salvas. Deseja fechar mesmo assim?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirmation.setTitle("SuperMidia Live");
+        confirmation.setHeaderText("Fechar o aplicativo");
+        confirmation.initOwner(currentSongLabel.getScene().getWindow());
+        return confirmation.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
+    }
+
+    @FXML
+    private void handleShowPresentation() {
+        showPresentation();
+    }
+
+    @FXML
+    private void handleShowPlaylist() {
+        presentationView.setVisible(false);
+        presentationView.setManaged(false);
+        playlistView.setVisible(true);
+        playlistView.setManaged(true);
+        playlistNavButton.setSelected(true);
+    }
+
     @FXML
     private void handleOpenMidi() {
         if (engine == null) {
             return;
         }
-
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Abrir arquivo MIDI");
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter(
-                        "Arquivos MIDI", "*.mid", "*.midi", "*.kar", "*.MID", "*.MIDI", "*.KAR"));
-        File previousFile = engine.getLoadedFile();
-        File previousDirectory = previousFile == null ? null : previousFile.getParentFile();
-        if (previousDirectory != null && previousDirectory.isDirectory()) {
-            chooser.setInitialDirectory(previousDirectory);
-        }
-
+        FileChooser chooser = midiFileChooser("Abrir arquivo MIDI");
+        setInitialDirectory(chooser);
         File selectedFile = chooser.showOpenDialog(currentSongLabel.getScene().getWindow());
         if (selectedFile == null) {
             return;
         }
 
+        int previousSize = playlist.size();
+        int index = playlist.add(selectedFile.toPath());
+        if (playlist.size() != previousSize) {
+            markPlaylistModified();
+        }
+        refreshPlaylistView(index);
+        loadPlaylistIndex(index);
+    }
+
+    @FXML
+    private void handleAddPlaylistItems() {
+        FileChooser chooser = midiFileChooser("Adicionar músicas à playlist");
+        setInitialDirectory(chooser);
+        List<File> selectedFiles = chooser.showOpenMultipleDialog(playlistListView.getScene().getWindow());
+        if (selectedFiles == null || selectedFiles.isEmpty()) {
+            return;
+        }
+
+        int previousSize = playlist.size();
+        for (File file : selectedFiles) {
+            playlist.add(file.toPath());
+        }
+        if (playlist.size() != previousSize) {
+            markPlaylistModified();
+        }
+
+        if (playlist.currentIndex() < 0 && !playlist.isEmpty()) {
+            loadPlaylistIndex(0);
+        }
+        refreshPlaylistView(playlistListView.getSelectionModel().getSelectedIndex());
+    }
+
+    @FXML
+    private void handleOpenPlaylist() {
+        if (!confirmDiscardPlaylistChanges()) {
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Abrir playlist");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Playlists M3U", "*.m3u8", "*.m3u", "*.M3U8", "*.M3U"));
+        setInitialDirectory(chooser);
+        File selectedFile = chooser.showOpenDialog(playlistListView.getScene().getWindow());
+        if (selectedFile == null) {
+            return;
+        }
+
         try {
-            engine.load(selectedFile);
-            currentSongLabel.setText(selectedFile.getName());
-            currentSongLabel.setTooltip(new Tooltip(selectedFile.getAbsolutePath()));
-            long duration = engine.getDurationMicroseconds();
-            progressSlider.setMax(Math.max(1, duration));
-            progressSlider.setValue(0);
-            durationTimeLabel.setText(formatTime(duration));
-            currentSongHintLabel.setText(formatTime(duration)
-                    + (engine.hasOutput() ? " · pronta para tocar" : " · selecione uma saída MIDI"));
-            statusLabel.setText("PRONTA");
-            updateTransportControls();
-        } catch (IOException | InvalidMidiDataException exception) {
-            showError("Não foi possível abrir o MIDI",
-                    "O arquivo selecionado não pôde ser lido como MIDI válido.", exception);
+            List<PlaylistItem> loadedItems = playlistFileService.load(selectedFile.toPath());
+            resetLoadedSong();
+            playlist.replaceAll(loadedItems);
+            currentPlaylistFile = selectedFile.toPath().toAbsolutePath().normalize();
+            playlistDirty = false;
+
+            int firstPlayable = firstExistingItemIndex();
+            if (firstPlayable >= 0) {
+                loadPlaylistIndex(firstPlayable);
+            }
+            refreshPlaylistView(firstPlayable);
+        } catch (IOException | RuntimeException exception) {
+            showError("Não foi possível abrir a playlist",
+                    "O arquivo selecionado não pôde ser lido.", exception);
+        }
+    }
+
+    @FXML
+    private void handleSavePlaylist() {
+        if (playlist.isEmpty()) {
+            return;
+        }
+        Path destination = currentPlaylistFile;
+        if (destination == null) {
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Salvar playlist");
+            chooser.setInitialFileName("repertorio.m3u8");
+            chooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("Playlist M3U8", "*.m3u8"));
+            setInitialDirectory(chooser);
+            File selectedFile = chooser.showSaveDialog(playlistListView.getScene().getWindow());
+            if (selectedFile == null) {
+                return;
+            }
+            destination = ensureM3u8Extension(selectedFile.toPath());
+        }
+
+        try {
+            playlistFileService.save(destination, playlist.items());
+            currentPlaylistFile = destination.toAbsolutePath().normalize();
+            playlistDirty = false;
+            updatePlaylistFileLabel();
+        } catch (IOException exception) {
+            showError("Não foi possível salvar a playlist",
+                    "Verifique se a pasta permite gravação.", exception);
+        }
+    }
+
+    @FXML
+    private void handleRemovePlaylistItem() {
+        int selectedIndex = playlistListView.getSelectionModel().getSelectedIndex();
+        if (selectedIndex < 0) {
+            return;
+        }
+        boolean removedCurrent = playlist.removeAt(selectedIndex);
+        markPlaylistModified();
+
+        if (removedCurrent) {
+            resetLoadedSong();
+            if (playlist.currentIndex() >= 0) {
+                loadPlaylistIndex(playlist.currentIndex());
+            }
+        }
+        int nextSelection = playlist.isEmpty() ? -1 : Math.min(selectedIndex, playlist.size() - 1);
+        refreshPlaylistView(nextSelection);
+    }
+
+    @FXML
+    private void handleMovePlaylistItemUp() {
+        int selectedIndex = playlistListView.getSelectionModel().getSelectedIndex();
+        if (selectedIndex > 0) {
+            int newIndex = playlist.moveUp(selectedIndex);
+            markPlaylistModified();
+            refreshPlaylistView(newIndex);
+        }
+    }
+
+    @FXML
+    private void handleMovePlaylistItemDown() {
+        int selectedIndex = playlistListView.getSelectionModel().getSelectedIndex();
+        if (selectedIndex >= 0 && selectedIndex < playlist.size() - 1) {
+            int newIndex = playlist.moveDown(selectedIndex);
+            markPlaylistModified();
+            refreshPlaylistView(newIndex);
+        }
+    }
+
+    @FXML
+    private void handlePlaylistClick(MouseEvent event) {
+        if (event.getClickCount() == 2) {
+            int selectedIndex = playlistListView.getSelectionModel().getSelectedIndex();
+            if (selectedIndex >= 0 && loadPlaylistIndex(selectedIndex)) {
+                showPresentation();
+            }
+        }
+    }
+
+    @FXML
+    private void handlePrevious() {
+        if (playlist.hasPrevious()) {
+            loadPlaylistIndex(playlist.currentIndex() - 1);
+        }
+    }
+
+    @FXML
+    private void handleNext() {
+        if (playlist.hasNext()) {
+            loadPlaylistIndex(playlist.currentIndex() + 1);
         }
     }
 
@@ -174,15 +366,9 @@ public final class MainController {
         MidiOutputDevice selection = midiOutputComboBox.getSelectionModel().getSelectedItem();
         try {
             engine.selectOutput(selection);
-            if (selection == null) {
-                midiOutputStatusLabel.setText("Saída MIDI desconectada");
-            } else {
-                midiOutputStatusLabel.setText("Saída: " + selection.name());
-            }
-            if (engine.hasSequence()) {
-                currentSongHintLabel.setText(formatTime(engine.getDurationMicroseconds())
-                        + (engine.hasOutput() ? " · pronta para tocar" : " · selecione uma saída MIDI"));
-            }
+            midiOutputStatusLabel.setText(selection == null
+                    ? "Saída MIDI desconectada" : "Saída: " + selection.name());
+            updateCurrentSongHint();
             updateTransportControls();
         } catch (MidiUnavailableException exception) {
             midiOutputStatusLabel.setText("Falha ao conectar a saída MIDI");
@@ -198,8 +384,7 @@ public final class MainController {
     @FXML
     private void handlePlaybackMode() {
         playbackMode = automaticModeToggle.isSelected()
-                ? PlaybackMode.AUTOMATIC
-                : PlaybackMode.MANUAL;
+                ? PlaybackMode.AUTOMATIC : PlaybackMode.MANUAL;
         refreshPlaybackMode();
     }
 
@@ -213,8 +398,7 @@ public final class MainController {
             statusLabel.setText("TOCANDO");
             updateTransportControls();
         } catch (IllegalStateException exception) {
-            showError("Não foi possível iniciar",
-                    exception.getMessage(), exception);
+            showError("Não foi possível iniciar", exception.getMessage(), exception);
         }
     }
 
@@ -246,6 +430,61 @@ public final class MainController {
         }
     }
 
+    private boolean loadPlaylistIndex(int index) {
+        if (engine == null || index < 0 || index >= playlist.size()) {
+            return false;
+        }
+        PlaylistItem item = playlist.get(index);
+        if (!item.exists()) {
+            showError("Arquivo não encontrado",
+                    "A música não está mais no caminho salvo:\n" + item.path(),
+                    new IOException(item.path().toString()));
+            return false;
+        }
+
+        try {
+            engine.load(item.path().toFile());
+            playlist.select(index);
+            setLoadedSongUi(item);
+            statusLabel.setText("PRONTA");
+            refreshPlaylistView(index);
+            updateTransportControls();
+            return true;
+        } catch (IOException | InvalidMidiDataException exception) {
+            showError("Não foi possível abrir o MIDI",
+                    "O arquivo selecionado não pôde ser lido como MIDI válido.", exception);
+            return false;
+        }
+    }
+
+    private void setLoadedSongUi(PlaylistItem item) {
+        currentSongLabel.setText(item.displayName());
+        currentSongLabel.setTooltip(new Tooltip(item.path().toString()));
+        long duration = engine.getDurationMicroseconds();
+        progressSlider.setMax(Math.max(1, duration));
+        progressSlider.setValue(0);
+        currentTimeLabel.setText("00:00");
+        durationTimeLabel.setText(formatTime(duration));
+        updateCurrentSongHint();
+        updateSongCards();
+    }
+
+    private void resetLoadedSong() {
+        if (engine != null) {
+            engine.unload();
+        }
+        currentSongLabel.setText("Nenhuma música carregada");
+        currentSongLabel.setTooltip(null);
+        currentSongHintLabel.setText("Escolha uma música na playlist");
+        progressSlider.setValue(0);
+        progressSlider.setMax(1);
+        currentTimeLabel.setText("00:00");
+        durationTimeLabel.setText("00:00");
+        statusLabel.setText("SEM MÚSICA");
+        updateSongCards();
+        updateTransportControls();
+    }
+
     private void configureControlListeners() {
         transposeSlider.valueProperty().addListener((ignored, oldValue, newValue) -> {
             int transpose = newValue.intValue();
@@ -271,20 +510,41 @@ public final class MainController {
         progressSlider.setOnMouseReleased(ignored -> seekToSliderPosition());
     }
 
+    private void configurePlaylistView() {
+        playlistListView.setItems(FXCollections.observableArrayList());
+        playlistListView.setCellFactory(ignored -> new ListCell<>() {
+            @Override
+            protected void updateItem(PlaylistItem item, boolean empty) {
+                super.updateItem(item, empty);
+                getStyleClass().remove("playlist-current-item");
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                boolean current = getIndex() == playlist.currentIndex();
+                String missing = item.exists() ? "" : "  · arquivo não encontrado";
+                setText((current ? "▶  " : "    ")
+                        + String.format("%02d", getIndex() + 1) + "  " + item.displayName() + missing);
+                if (current) {
+                    getStyleClass().add("playlist-current-item");
+                }
+            }
+        });
+        playlistListView.getSelectionModel().selectedIndexProperty().addListener(
+                (ignored, oldValue, newValue) -> updatePlaylistEditingButtons());
+    }
+
     private void refreshMidiOutputs() {
         if (engine == null) {
             return;
         }
-
         refreshingOutputs = true;
         try {
             String previousName = midiOutputComboBox.getValue() == null
                     ? null : midiOutputComboBox.getValue().name();
             List<MidiOutputDevice> outputs = engine.listOutputDevices();
             midiOutputComboBox.setItems(FXCollections.observableArrayList(outputs));
-
-            MidiOutputDevice preferred = findPreferredOutput(outputs, previousName);
-            midiOutputComboBox.getSelectionModel().select(preferred);
+            midiOutputComboBox.getSelectionModel().select(findPreferredOutput(outputs, previousName));
             if (outputs.isEmpty()) {
                 midiOutputStatusLabel.setText("Nenhuma saída MIDI encontrada");
             }
@@ -303,7 +563,7 @@ public final class MainController {
             }
         }
         for (MidiOutputDevice output : outputs) {
-            String normalizedName = output.name().toLowerCase();
+            String normalizedName = output.name().toLowerCase(Locale.ROOT);
             if (normalizedName.contains("jm-5") || normalizedName.contains("vima")) {
                 return output;
             }
@@ -337,10 +597,66 @@ public final class MainController {
         if (engine == null || !engine.hasSequence()) {
             return;
         }
+        if (playlist.hasNext() && loadPlaylistIndex(playlist.currentIndex() + 1)) {
+            if (playbackMode == PlaybackMode.AUTOMATIC) {
+                engine.play();
+                statusLabel.setText("TOCANDO");
+            } else {
+                statusLabel.setText("PRONTA");
+            }
+            updateTransportControls();
+            return;
+        }
+
         statusLabel.setText("FINALIZADA");
         progressSlider.setValue(engine.getDurationMicroseconds());
         currentTimeLabel.setText(formatTime(engine.getDurationMicroseconds()));
         updateTransportControls();
+    }
+
+    private void refreshPlaylistView(int selectedIndex) {
+        playlistListView.getItems().setAll(playlist.items());
+        playlistListView.refresh();
+        if (selectedIndex >= 0 && selectedIndex < playlist.size()) {
+            playlistListView.getSelectionModel().select(selectedIndex);
+            playlistListView.scrollTo(selectedIndex);
+        }
+        playlistCountLabel.setText(playlist.size() == 1
+                ? "1 música" : playlist.size() + " músicas");
+        savePlaylistButton.setDisable(playlist.isEmpty());
+        updatePlaylistFileLabel();
+        updatePlaylistEditingButtons();
+        updateSongCards();
+        updateTransportControls();
+    }
+
+    private void updatePlaylistEditingButtons() {
+        int selectedIndex = playlistListView.getSelectionModel().getSelectedIndex();
+        boolean selected = selectedIndex >= 0;
+        removePlaylistButton.setDisable(!selected);
+        moveUpButton.setDisable(!selected || selectedIndex == 0);
+        moveDownButton.setDisable(!selected || selectedIndex >= playlist.size() - 1);
+    }
+
+    private void updateSongCards() {
+        playlist.next().ifPresentOrElse(item -> {
+            nextSongLabel.setText(item.displayName());
+            nextSongHintLabel.setText(playbackMode == PlaybackMode.AUTOMATIC
+                    ? "Iniciará automaticamente" : "Ficará preparada ao final");
+        }, () -> {
+            nextSongLabel.setText(playlist.isEmpty()
+                    ? "A playlist ainda está vazia" : "Fim da playlist");
+            nextSongHintLabel.setText(playlist.isEmpty()
+                    ? "Adicione músicas na área Playlist" : "Nenhuma música depois desta");
+        });
+        playlistListView.refresh();
+    }
+
+    private void updateCurrentSongHint() {
+        if (engine != null && engine.hasSequence()) {
+            currentSongHintLabel.setText(formatTime(engine.getDurationMicroseconds())
+                    + (engine.hasOutput() ? " · pronta para tocar" : " · selecione uma saída MIDI"));
+        }
     }
 
     private void updateTransportControls() {
@@ -354,6 +670,8 @@ public final class MainController {
         stopButton.setDisable(!loaded);
         progressSlider.setDisable(!loaded);
         panicButton.setDisable(!outputConnected);
+        previousButton.setDisable(!playlist.hasPrevious());
+        nextButton.setDisable(!playlist.hasNext());
     }
 
     private void disableMidiControls() {
@@ -369,6 +687,74 @@ public final class MainController {
         automaticModeToggle.setSelected(playbackMode == PlaybackMode.AUTOMATIC);
         automaticModeToggle.setText(playbackMode.label());
         playbackModeLabel.setText(playbackMode.description());
+        updateSongCards();
+    }
+
+    private void showPresentation() {
+        playlistView.setVisible(false);
+        playlistView.setManaged(false);
+        presentationView.setVisible(true);
+        presentationView.setManaged(true);
+        presentationNavButton.setSelected(true);
+    }
+
+    private void markPlaylistModified() {
+        playlistDirty = true;
+        updatePlaylistFileLabel();
+    }
+
+    private void updatePlaylistFileLabel() {
+        String label = currentPlaylistFile == null
+                ? "Playlist não salva" : currentPlaylistFile.getFileName().toString();
+        playlistFileLabel.setText(label + (playlistDirty ? " · alterações não salvas" : ""));
+    }
+
+    private boolean confirmDiscardPlaylistChanges() {
+        if (!playlistDirty || playlist.isEmpty()) {
+            return true;
+        }
+        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
+                "A playlist atual possui alterações não salvas. Deseja descartá-las?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirmation.setTitle("SuperMidia Live");
+        confirmation.setHeaderText("Abrir outra playlist");
+        confirmation.initOwner(playlistListView.getScene().getWindow());
+        return confirmation.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
+    }
+
+    private int firstExistingItemIndex() {
+        for (int index = 0; index < playlist.size(); index++) {
+            if (playlist.get(index).exists()) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private FileChooser midiFileChooser(String title) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(title);
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter(
+                        "Arquivos MIDI", "*.mid", "*.midi", "*.kar", "*.MID", "*.MIDI", "*.KAR"));
+        return chooser;
+    }
+
+    private void setInitialDirectory(FileChooser chooser) {
+        File directory = null;
+        if (currentPlaylistFile != null && currentPlaylistFile.getParent() != null) {
+            directory = currentPlaylistFile.getParent().toFile();
+        } else if (engine != null && engine.getLoadedFile() != null) {
+            directory = engine.getLoadedFile().getParentFile();
+        }
+        if (directory != null && directory.isDirectory()) {
+            chooser.setInitialDirectory(directory);
+        }
+    }
+
+    private Path ensureM3u8Extension(Path path) {
+        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return fileName.endsWith(".m3u8") ? path : Path.of(path.toString() + ".m3u8");
     }
 
     private void showError(String title, String message, Exception exception) {
