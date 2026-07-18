@@ -41,6 +41,52 @@
     -fx-font-size: 12px;
 }
 
+.output-device-chip {
+    -fx-min-width: 275px;
+}
+
+.device-combo {
+    -fx-pref-width: 225px;
+    -fx-background-color: #222b3a;
+    -fx-background-radius: 7;
+}
+
+.device-combo .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #d7dde8;
+    -fx-font-size: 12px;
+}
+
+.device-combo .arrow-button .arrow {
+    -fx-background-color: #8f9bad;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #18202c;
+    -fx-border-color: #303a4b;
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: #18202c;
+    -fx-text-fill: #d7dde8;
+    -fx-padding: 8 10;
+}
+
+.combo-box-popup .list-cell:hover,
+.combo-box-popup .list-cell:selected {
+    -fx-background-color: #235b4e;
+    -fx-text-fill: #f4fffb;
+}
+
+.refresh-button {
+    -fx-min-width: 30px;
+    -fx-min-height: 30px;
+    -fx-background-color: #273143;
+    -fx-background-radius: 7;
+    -fx-text-fill: #cbd4e1;
+    -fx-font-weight: 800;
+}
+
 .micro-label,
 .section-caption,
 .eyebrow {

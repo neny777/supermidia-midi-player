@@ -14,6 +14,18 @@ Aplicativo multiplataforma para apresentações ao vivo com reprodução MIDI, l
 
 A branch `rewrite-javafx` contém a nova fundação do produto. A versão inicial em Swing permanece preservada no histórico da branch `main`.
 
+O player já permite:
+
+- detectar e selecionar saídas MIDI disponíveis;
+- abrir arquivos `.mid`, `.midi` e `.kar`;
+- tocar, pausar, parar e mover a posição da música;
+- alterar velocidade entre 50% e 150%;
+- transpor notas melódicas entre -12 e +12 sem alterar o canal de bateria;
+- controlar o volume geral do acompanhamento;
+- enviar `All Sound Off` e `All Notes Off` com o botão Panic.
+
+A playlist, as letras sincronizadas, o mixer por canal e o mapeamento da SMC-Mixer serão implementados nas próximas etapas.
+
 ## Executar
 
 No Windows:

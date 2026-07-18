@@ -9,11 +9,14 @@ import javafx.stage.Stage;
 import java.io.IOException;
 
 public final class SuperMidiaApplication extends Application {
+    private MainController controller;
+
     @Override
     public void start(Stage stage) throws IOException {
         FXMLLoader loader = new FXMLLoader(
                 SuperMidiaApplication.class.getResource("main-view.fxml"));
         Parent root = loader.load();
+        controller = loader.getController();
 
         Scene scene = new Scene(root, 1280, 800);
         scene.getStylesheets().add(
@@ -25,6 +28,13 @@ public final class SuperMidiaApplication extends Application {
         stage.setScene(scene);
         stage.centerOnScreen();
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+        if (controller != null) {
+            controller.shutdown();
+        }
     }
 
     public static void main(String[] args) {
