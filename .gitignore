@@ -1,0 +1,18 @@
+# NetBeans user-specific settings
+/nbproject/private/
+
+# Generated build output
+/build/
+/dist/
+/nbdist/
+*.class
+
+# Runtime and diagnostic files
+*.log
+hs_err_pid*
+replay_pid*
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
