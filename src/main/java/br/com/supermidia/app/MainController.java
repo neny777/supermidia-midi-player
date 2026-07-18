@@ -1,6 +1,8 @@
 package br.com.supermidia.app;
 
 import br.com.supermidia.core.PlaybackMode;
+import br.com.supermidia.lyrics.LyricLine;
+import br.com.supermidia.lyrics.MidiLyrics;
 import br.com.supermidia.midi.MidiOutputDevice;
 import br.com.supermidia.midi.MidiPlaybackEngine;
 import br.com.supermidia.playlist.PlaylistFileService;
@@ -45,6 +47,24 @@ public final class MainController {
     @FXML
     private Label nextSongHintLabel;
     @FXML
+    private Label stageLyricsStatusLabel;
+    @FXML
+    private Label stagePreviousLyricLabel;
+    @FXML
+    private Label stageCurrentLyricLabel;
+    @FXML
+    private Label stageNextLyricLabel;
+    @FXML
+    private Label lyricsSongLabel;
+    @FXML
+    private Label lyricsCountLabel;
+    @FXML
+    private Label lyricsPreviousLabel;
+    @FXML
+    private Label lyricsCurrentLabel;
+    @FXML
+    private Label lyricsNextLabel;
+    @FXML
     private Label playbackModeLabel;
     @FXML
     private Label statusLabel;
@@ -69,6 +89,8 @@ public final class MainController {
     private ComboBox<MidiOutputDevice> midiOutputComboBox;
     @FXML
     private ListView<PlaylistItem> playlistListView;
+    @FXML
+    private ListView<LyricLine> lyricsListView;
 
     @FXML
     private ToggleButton automaticModeToggle;
@@ -76,6 +98,8 @@ public final class MainController {
     private ToggleButton presentationNavButton;
     @FXML
     private ToggleButton playlistNavButton;
+    @FXML
+    private ToggleButton lyricsNavButton;
 
     @FXML
     private Slider transposeSlider;
@@ -111,6 +135,8 @@ public final class MainController {
     private ScrollPane presentationView;
     @FXML
     private VBox playlistView;
+    @FXML
+    private VBox lyricsView;
 
     private final PlaylistManager playlist = new PlaylistManager();
     private final PlaylistFileService playlistFileService = new PlaylistFileService();
@@ -119,6 +145,8 @@ public final class MainController {
     private MidiPlaybackEngine engine;
     private Timeline progressTimeline;
     private Path currentPlaylistFile;
+    private MidiLyrics currentLyrics = MidiLyrics.empty();
+    private int displayedLyricIndex = Integer.MIN_VALUE;
     private boolean playlistDirty;
     private boolean refreshingOutputs;
 
@@ -126,6 +154,7 @@ public final class MainController {
     private void initialize() {
         configureControlListeners();
         configurePlaylistView();
+        configureLyricsView();
         refreshPlaybackMode();
         refreshPlaylistView(-1);
 
@@ -177,9 +206,22 @@ public final class MainController {
     private void handleShowPlaylist() {
         presentationView.setVisible(false);
         presentationView.setManaged(false);
+        lyricsView.setVisible(false);
+        lyricsView.setManaged(false);
         playlistView.setVisible(true);
         playlistView.setManaged(true);
         playlistNavButton.setSelected(true);
+    }
+
+    @FXML
+    private void handleShowLyrics() {
+        presentationView.setVisible(false);
+        presentationView.setManaged(false);
+        playlistView.setVisible(false);
+        playlistView.setManaged(false);
+        lyricsView.setVisible(true);
+        lyricsView.setManaged(true);
+        lyricsNavButton.setSelected(true);
     }
 
     @FXML
@@ -417,6 +459,7 @@ public final class MainController {
             engine.stop();
             progressSlider.setValue(0);
             currentTimeLabel.setText("00:00");
+            refreshLyricsAtTick(0);
             statusLabel.setText("PRONTA");
             updateTransportControls();
         }
@@ -445,6 +488,7 @@ public final class MainController {
         try {
             engine.load(item.path().toFile());
             playlist.select(index);
+            loadLyrics(item);
             setLoadedSongUi(item);
             statusLabel.setText("PRONTA");
             refreshPlaylistView(index);
@@ -481,6 +525,11 @@ public final class MainController {
         currentTimeLabel.setText("00:00");
         durationTimeLabel.setText("00:00");
         statusLabel.setText("SEM MÚSICA");
+        currentLyrics = MidiLyrics.empty();
+        displayedLyricIndex = Integer.MIN_VALUE;
+        lyricsListView.getItems().clear();
+        lyricsSongLabel.setText("Nenhuma música carregada");
+        refreshLyricsAtTick(0);
         updateSongCards();
         updateTransportControls();
     }
@@ -534,6 +583,21 @@ public final class MainController {
                 (ignored, oldValue, newValue) -> updatePlaylistEditingButtons());
     }
 
+    private void configureLyricsView() {
+        lyricsListView.setItems(FXCollections.observableArrayList());
+        lyricsListView.setCellFactory(ignored -> new ListCell<>() {
+            @Override
+            protected void updateItem(LyricLine line, boolean empty) {
+                super.updateItem(line, empty);
+                if (empty || line == null) {
+                    setText(null);
+                    return;
+                }
+                setText(String.format("%02d  %s", getIndex() + 1, line.text()));
+            }
+        });
+    }
+
     private void refreshMidiOutputs() {
         if (engine == null) {
             return;
@@ -584,12 +648,14 @@ public final class MainController {
         long position = engine.getPositionMicroseconds();
         progressSlider.setValue(position);
         currentTimeLabel.setText(formatTime(position));
+        refreshLyricsAtTick(engine.getTickPosition());
     }
 
     private void seekToSliderPosition() {
         if (engine != null && engine.hasSequence()) {
             engine.setPositionMicroseconds((long) progressSlider.getValue());
             currentTimeLabel.setText(formatTime((long) progressSlider.getValue()));
+            refreshLyricsAtTick(engine.getTickPosition());
         }
     }
 
@@ -693,9 +759,67 @@ public final class MainController {
     private void showPresentation() {
         playlistView.setVisible(false);
         playlistView.setManaged(false);
+        lyricsView.setVisible(false);
+        lyricsView.setManaged(false);
         presentationView.setVisible(true);
         presentationView.setManaged(true);
         presentationNavButton.setSelected(true);
+    }
+
+    private void loadLyrics(PlaylistItem item) {
+        try {
+            currentLyrics = MidiLyrics.fromFile(item.path().toFile());
+        } catch (IOException | InvalidMidiDataException exception) {
+            currentLyrics = MidiLyrics.empty();
+        }
+        displayedLyricIndex = Integer.MIN_VALUE;
+        lyricsSongLabel.setText(item.displayName());
+        lyricsListView.getItems().setAll(currentLyrics.lines());
+        refreshLyricsAtTick(0);
+    }
+
+    private void refreshLyricsAtTick(long tick) {
+        int lyricIndex = currentLyrics.currentIndex(tick);
+        if (lyricIndex == displayedLyricIndex) {
+            return;
+        }
+        displayedLyricIndex = lyricIndex;
+
+        if (currentLyrics.isEmpty()) {
+            setLyricLabels("", "Este arquivo MIDI não contém letras incorporadas", "");
+            stageLyricsStatusLabel.setText("SEM LETRA INCORPORADA");
+            lyricsCountLabel.setText("Sem letra");
+            lyricsListView.getSelectionModel().clearSelection();
+            return;
+        }
+
+        if (lyricIndex < 0) {
+            setLyricLabels("", "Aguardando entrada da letra…", lyricText(0));
+            stageLyricsStatusLabel.setText("LETRA SINCRONIZADA · 0 / " + currentLyrics.size());
+            lyricsCountLabel.setText("0 / " + currentLyrics.size() + " linhas");
+            lyricsListView.getSelectionModel().clearSelection();
+            return;
+        }
+
+        setLyricLabels(lyricText(lyricIndex - 1), lyricText(lyricIndex), lyricText(lyricIndex + 1));
+        stageLyricsStatusLabel.setText("LETRA SINCRONIZADA · "
+                + (lyricIndex + 1) + " / " + currentLyrics.size());
+        lyricsCountLabel.setText((lyricIndex + 1) + " / " + currentLyrics.size() + " linhas");
+        lyricsListView.getSelectionModel().select(lyricIndex);
+        lyricsListView.scrollTo(Math.max(0, lyricIndex - 2));
+    }
+
+    private void setLyricLabels(String previous, String current, String next) {
+        stagePreviousLyricLabel.setText(previous);
+        stageCurrentLyricLabel.setText(current);
+        stageNextLyricLabel.setText(next);
+        lyricsPreviousLabel.setText(previous);
+        lyricsCurrentLabel.setText(current);
+        lyricsNextLabel.setText(next);
+    }
+
+    private String lyricText(int index) {
+        return currentLyrics.lineAt(index).map(LyricLine::text).orElse("");
     }
 
     private void markPlaylistModified() {

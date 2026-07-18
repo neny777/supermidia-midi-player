@@ -27,8 +27,11 @@ O player já permite:
 - abrir e salvar playlists UTF-8 no formato `.m3u8`;
 - preparar a próxima música automaticamente no modo Manual;
 - iniciar a próxima música automaticamente no modo Automático.
+- extrair letras incorporadas em eventos `Lyric` de MIDI e `Text` de KAR;
+- acompanhar linha anterior, atual e próxima usando o relógio do sequenciador;
+- exibir a letra completa em uma área separada da interface.
 
-As letras sincronizadas, o mixer por canal e o mapeamento da SMC-Mixer serão implementados nas próximas etapas.
+O mixer por canal, a saída de letras para um segundo monitor e o mapeamento da SMC-Mixer serão implementados nas próximas etapas.
 
 ## Executar
 

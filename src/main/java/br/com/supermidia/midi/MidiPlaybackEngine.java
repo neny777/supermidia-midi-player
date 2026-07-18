@@ -178,6 +178,14 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         return sequencer.getSequence() == null ? 0 : sequencer.getMicrosecondLength();
     }
 
+    public synchronized long getTickPosition() {
+        return sequencer.getSequence() == null ? 0 : sequencer.getTickPosition();
+    }
+
+    public synchronized long getTickLength() {
+        return sequencer.getSequence() == null ? 0 : sequencer.getTickLength();
+    }
+
     public synchronized boolean hasSequence() {
         return sequencer.getSequence() != null;
     }

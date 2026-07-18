@@ -62,7 +62,8 @@
                           toggleGroup="$navigationGroup" onAction="#handleShowPlaylist"
                           styleClass="nav-button" maxWidth="Infinity"/>
             <ToggleButton text="Mixer" disable="true" styleClass="nav-button" maxWidth="Infinity"/>
-            <ToggleButton text="Letras" disable="true" styleClass="nav-button" maxWidth="Infinity"/>
+            <ToggleButton fx:id="lyricsNavButton" text="Letras" toggleGroup="$navigationGroup"
+                          onAction="#handleShowLyrics" styleClass="nav-button" maxWidth="Infinity"/>
 
             <Region VBox.vgrow="ALWAYS"/>
             <Separator/>
@@ -117,10 +118,12 @@
                     </HBox>
 
                     <VBox alignment="CENTER" spacing="12" styleClass="lyrics-card" VBox.vgrow="ALWAYS">
-                        <Label text="LETRA SINCRONIZADA" styleClass="micro-label"/>
-                        <Label text="A letra da música aparecerá aqui" styleClass="lyrics-current"
+                        <Label fx:id="stageLyricsStatusLabel" text="LETRA SINCRONIZADA" styleClass="micro-label"/>
+                        <Label fx:id="stagePreviousLyricLabel" text="" styleClass="lyrics-previous"
                                wrapText="true" textAlignment="CENTER"/>
-                        <Label text="com a próxima linha preparada logo abaixo" styleClass="lyrics-next"
+                        <Label fx:id="stageCurrentLyricLabel" text="A letra da música aparecerá aqui" styleClass="lyrics-current"
+                               wrapText="true" textAlignment="CENTER"/>
+                        <Label fx:id="stageNextLyricLabel" text="com a próxima linha preparada logo abaixo" styleClass="lyrics-next"
                                wrapText="true" textAlignment="CENTER"/>
                     </VBox>
 
@@ -191,6 +194,32 @@
                     <Region HBox.hgrow="ALWAYS"/>
                     <Label text="Duplo clique prepara a música selecionada" styleClass="muted-label"/>
                 </HBox>
+            </VBox>
+
+            <VBox fx:id="lyricsView" visible="false" managed="false" spacing="18" styleClass="content-area">
+                <HBox alignment="CENTER_LEFT" spacing="14">
+                    <VBox spacing="5" HBox.hgrow="ALWAYS">
+                        <Label text="LETRAS" styleClass="eyebrow"/>
+                        <Label text="Leitura sincronizada" styleClass="page-title"/>
+                        <Label text="Acompanhe o texto incorporado ao arquivo MIDI." styleClass="page-subtitle"/>
+                    </VBox>
+                    <VBox alignment="CENTER_RIGHT" spacing="4">
+                        <Label fx:id="lyricsSongLabel" text="Nenhuma música carregada" styleClass="song-title secondary-song-title"/>
+                        <Label fx:id="lyricsCountLabel" text="Sem letra" styleClass="muted-label"/>
+                    </VBox>
+                </HBox>
+
+                <VBox alignment="CENTER" spacing="14" styleClass="lyrics-detail-card">
+                    <Label fx:id="lyricsPreviousLabel" text="" styleClass="lyrics-detail-previous"
+                           wrapText="true" textAlignment="CENTER"/>
+                    <Label fx:id="lyricsCurrentLabel" text="Carregue uma música para visualizar a letra"
+                           styleClass="lyrics-detail-current" wrapText="true" textAlignment="CENTER"/>
+                    <Label fx:id="lyricsNextLabel" text="" styleClass="lyrics-detail-next"
+                           wrapText="true" textAlignment="CENTER"/>
+                </VBox>
+
+                <Label text="TEXTO COMPLETO" styleClass="micro-label"/>
+                <ListView fx:id="lyricsListView" styleClass="lyrics-list" VBox.vgrow="ALWAYS"/>
             </VBox>
         </StackPane>
     </center>

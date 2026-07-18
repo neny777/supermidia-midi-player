@@ -25,6 +25,7 @@
 .brand-subtitle,
 .muted-label,
 .page-subtitle,
+.lyrics-previous,
 .lyrics-next {
     -fx-text-fill: #8995a8;
 }
@@ -186,8 +187,59 @@
     -fx-font-weight: 700;
 }
 
+.lyrics-previous {
+    -fx-font-size: 16px;
+}
+
 .lyrics-next {
     -fx-font-size: 20px;
+}
+
+.lyrics-detail-card {
+    -fx-min-height: 230px;
+    -fx-background-color: #141b26;
+    -fx-border-color: #242e3d;
+    -fx-border-radius: 14;
+    -fx-background-radius: 14;
+    -fx-padding: 24 38;
+}
+
+.lyrics-detail-previous {
+    -fx-text-fill: #768297;
+    -fx-font-size: 18px;
+}
+
+.lyrics-detail-current {
+    -fx-text-fill: #f8fafc;
+    -fx-font-size: 34px;
+    -fx-font-weight: 800;
+}
+
+.lyrics-detail-next {
+    -fx-text-fill: #70e8c4;
+    -fx-font-size: 22px;
+}
+
+.lyrics-list {
+    -fx-background-color: #111722;
+    -fx-border-color: #242e3d;
+    -fx-border-radius: 14;
+    -fx-background-radius: 14;
+    -fx-padding: 6;
+}
+
+.lyrics-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-text-fill: #aeb8c7;
+    -fx-font-size: 15px;
+    -fx-padding: 9 13;
+}
+
+.lyrics-list .list-cell:selected {
+    -fx-background-color: #20332f;
+    -fx-text-fill: #73f0ca;
+    -fx-font-weight: 700;
 }
 
 .quick-control {
