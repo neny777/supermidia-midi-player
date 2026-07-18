@@ -1,11 +1,13 @@
-# NetBeans user-specific settings
-/nbproject/private/
+# Gradle
+.gradle/
+build/
 
-# Generated build output
-/build/
-/dist/
-/nbdist/
-*.class
+# NetBeans and other IDE state
+nbproject/private/
+.idea/
+.vscode/
+*.iml
+out/
 
 # Runtime and diagnostic files
 *.log
