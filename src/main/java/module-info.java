@@ -1,5 +1,6 @@
 module br.com.supermidia {
     requires java.desktop;
+    requires java.prefs;
     requires javafx.controls;
     requires javafx.fxml;
 

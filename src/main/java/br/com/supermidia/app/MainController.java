@@ -11,7 +11,9 @@ import br.com.supermidia.playlist.PlaylistFileService;
 import br.com.supermidia.playlist.PlaylistItem;
 import br.com.supermidia.playlist.PlaylistManager;
 import javafx.animation.KeyFrame;
+import javafx.animation.Interpolator;
 import javafx.animation.Timeline;
+import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -24,15 +26,19 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
-import javafx.scene.control.ScrollPane;
+import javafx.scene.control.MenuButton;
 import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.Scene;
+import javafx.scene.shape.Rectangle;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import javax.sound.midi.InvalidMidiDataException;
@@ -42,18 +48,18 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.IntFunction;
+import java.util.prefs.Preferences;
 
 public final class MainController {
     private static final int MIDI_CHANNEL_COUNT = 16;
     private static final int MIXER_BANK_SIZE = 8;
+    private static final Duration LYRIC_SCROLL_DURATION = Duration.millis(260);
+    private static final String AUTOPLAY_PREFERENCE_KEY = "autoplayEnabled";
     @FXML
     private Label currentSongLabel;
     @FXML
-    private Label currentSongHintLabel;
-    @FXML
     private Label nextSongLabel;
-    @FXML
-    private Label nextSongHintLabel;
     @FXML
     private Label stageLyricsStatusLabel;
     @FXML
@@ -63,25 +69,9 @@ public final class MainController {
     @FXML
     private Label stageNextLyricLabel;
     @FXML
-    private Label lyricsSongLabel;
-    @FXML
-    private Label lyricsCountLabel;
-    @FXML
-    private Label lyricsPreviousLabel;
-    @FXML
-    private Label lyricsCurrentLabel;
-    @FXML
-    private Label lyricsNextLabel;
-    @FXML
-    private Label playbackModeLabel;
+    private Label stageIncomingLyricLabel;
     @FXML
     private Label statusLabel;
-    @FXML
-    private Label transposeValueLabel;
-    @FXML
-    private Label speedValueLabel;
-    @FXML
-    private Label masterVolumeValueLabel;
     @FXML
     private Label currentTimeLabel;
     @FXML
@@ -93,14 +83,12 @@ public final class MainController {
     @FXML
     private Label playlistCountLabel;
     @FXML
-    private Label mixerSongLabel;
+    private Label chordValueLabel;
 
     @FXML
     private ComboBox<MidiOutputDevice> midiOutputComboBox;
     @FXML
     private ListView<PlaylistItem> playlistListView;
-    @FXML
-    private ListView<LyricLine> lyricsListView;
 
     @FXML
     private ToggleButton automaticModeToggle;
@@ -109,13 +97,7 @@ public final class MainController {
     @FXML
     private ToggleButton playlistNavButton;
     @FXML
-    private ToggleButton lyricsNavButton;
-    @FXML
-    private ToggleButton mixerNavButton;
-    @FXML
-    private ToggleButton mixerBankOneButton;
-    @FXML
-    private ToggleButton mixerBankTwoButton;
+    private ToggleButton settingsNavButton;
 
     @FXML
     private Slider transposeSlider;
@@ -123,6 +105,12 @@ public final class MainController {
     private Slider speedSlider;
     @FXML
     private Slider masterVolumeSlider;
+    @FXML
+    private MenuButton transposeMenuButton;
+    @FXML
+    private MenuButton speedMenuButton;
+    @FXML
+    private MenuButton masterVolumeMenuButton;
     @FXML
     private Slider progressSlider;
 
@@ -146,26 +134,28 @@ public final class MainController {
     private Button moveDownButton;
     @FXML
     private Button removePlaylistButton;
-    @FXML
-    private Button resetMixerButton;
 
     @FXML
-    private ScrollPane presentationView;
+    private VBox presentationView;
     @FXML
     private VBox playlistView;
     @FXML
-    private VBox lyricsView;
+    private VBox settingsView;
     @FXML
-    private ScrollPane mixerView;
+    private StackPane lyricsViewport;
     @FXML
-    private HBox mixerChannelsContainer;
+    private VBox lyricsLinesContainer;
+    @FXML
+    private HBox mixerBankOneContainer;
+    @FXML
+    private HBox mixerBankTwoContainer;
 
     private final PlaylistManager playlist = new PlaylistManager();
     private final PlaylistFileService playlistFileService = new PlaylistFileService();
+    private final Preferences preferences = Preferences.userNodeForPackage(MainController.class);
     private final VBox[] mixerChannelStrips = new VBox[MIDI_CHANNEL_COUNT];
     private final Slider[] channelVolumeSliders = new Slider[MIDI_CHANNEL_COUNT];
     private final Label[] channelVolumeLabels = new Label[MIDI_CHANNEL_COUNT];
-    private final Label[] channelNameLabels = new Label[MIDI_CHANNEL_COUNT];
     private final Label[] channelInstrumentLabels = new Label[MIDI_CHANNEL_COUNT];
     private final Label[] channelActivityLabels = new Label[MIDI_CHANNEL_COUNT];
     private final ToggleButton[] channelMuteButtons = new ToggleButton[MIDI_CHANNEL_COUNT];
@@ -174,27 +164,30 @@ public final class MainController {
     private PlaybackMode playbackMode = PlaybackMode.MANUAL;
     private MidiPlaybackEngine engine;
     private Timeline progressTimeline;
+    private TranslateTransition lyricScrollTransition;
     private Path currentPlaylistFile;
     private MidiLyrics currentLyrics = MidiLyrics.empty();
     private MidiSongAnalysis currentSongAnalysis = MidiSongAnalysis.empty();
     private int displayedLyricIndex = Integer.MIN_VALUE;
-    private int currentMixerBank;
     private boolean updatingMixerControls;
     private boolean playlistDirty;
     private boolean refreshingOutputs;
+    private Stage pianoStage;
 
     @FXML
     private void initialize() {
         configureControlListeners();
         configurePlaylistView();
-        configureLyricsView();
         configureMixerView();
+        configureLyricsViewport();
+        setLyricLabels("", "", "");
+        playbackMode = loadPlaybackModePreference();
         refreshPlaybackMode();
         refreshPlaylistView(-1);
 
         try {
             engine = new MidiPlaybackEngine();
-            engine.setTranspose((int) transposeSlider.getValue());
+            engine.setTranspose((int) Math.round(transposeSlider.getValue()));
             engine.setTempoFactor((float) (speedSlider.getValue() / 100.0));
             engine.setMasterVolume(masterVolumeSlider.getValue() / 100.0);
             engine.setPlaybackFinishedHandler(
@@ -210,6 +203,7 @@ public final class MainController {
     }
 
     public void shutdown() {
+        stopLyricScrollAnimation();
         if (progressTimeline != null) {
             progressTimeline.stop();
         }
@@ -225,7 +219,7 @@ public final class MainController {
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
                 "A playlist possui alterações não salvas. Deseja fechar mesmo assim?",
                 ButtonType.OK, ButtonType.CANCEL);
-        confirmation.setTitle("SuperMidia Live");
+        confirmation.setTitle("SuperMídia MIDI Player");
         confirmation.setHeaderText("Fechar o aplicativo");
         confirmation.initOwner(currentSongLabel.getScene().getWindow());
         return confirmation.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
@@ -240,75 +234,65 @@ public final class MainController {
     private void handleShowPlaylist() {
         presentationView.setVisible(false);
         presentationView.setManaged(false);
-        lyricsView.setVisible(false);
-        lyricsView.setManaged(false);
-        mixerView.setVisible(false);
-        mixerView.setManaged(false);
+        settingsView.setVisible(false);
+        settingsView.setManaged(false);
         playlistView.setVisible(true);
         playlistView.setManaged(true);
         playlistNavButton.setSelected(true);
     }
 
     @FXML
-    private void handleShowLyrics() {
+    private void handleShowSettings() {
         presentationView.setVisible(false);
         presentationView.setManaged(false);
         playlistView.setVisible(false);
         playlistView.setManaged(false);
-        mixerView.setVisible(false);
-        mixerView.setManaged(false);
-        lyricsView.setVisible(true);
-        lyricsView.setManaged(true);
-        lyricsNavButton.setSelected(true);
+        settingsView.setVisible(true);
+        settingsView.setManaged(true);
+        settingsNavButton.setSelected(true);
     }
 
     @FXML
-    private void handleShowMixer() {
-        presentationView.setVisible(false);
-        presentationView.setManaged(false);
-        playlistView.setVisible(false);
-        playlistView.setManaged(false);
-        lyricsView.setVisible(false);
-        lyricsView.setManaged(false);
-        mixerView.setVisible(true);
-        mixerView.setManaged(true);
-        mixerNavButton.setSelected(true);
-    }
+    private void handleOpenPiano() {
+        if (pianoStage == null) {
+            Label title = new Label("Piano");
+            title.getStyleClass().add("page-title");
+            Label message = new Label(
+                    "A visualização das notas ativas será adicionada na próxima etapa.");
+            message.getStyleClass().add("muted-label");
+            message.setWrapText(true);
 
-    @FXML
-    private void handleMixerBankOne() {
-        showMixerBank(0);
-    }
+            VBox content = new VBox(12, title, message);
+            content.setAlignment(Pos.CENTER);
+            content.getStyleClass().addAll("app-shell", "piano-placeholder");
 
-    @FXML
-    private void handleMixerBankTwo() {
-        showMixerBank(1);
-    }
+            Scene scene = new Scene(content, 760, 260);
+            scene.getStylesheets().add(
+                    getClass().getResource("theme.css").toExternalForm());
 
-    @FXML
-    private void handleResetMixer() {
-        applyOriginalMixerState();
-    }
-
-    @FXML
-    private void handleOpenMidi() {
-        if (engine == null) {
-            return;
+            pianoStage = new Stage();
+            pianoStage.setTitle("Piano — SuperMídia MIDI Player");
+            pianoStage.initOwner(currentSongLabel.getScene().getWindow());
+            pianoStage.setScene(scene);
+            pianoStage.setMinWidth(520);
+            pianoStage.setMinHeight(220);
+            pianoStage.setOnHidden(ignored -> pianoStage = null);
         }
-        FileChooser chooser = midiFileChooser("Abrir arquivo MIDI");
-        setInitialDirectory(chooser);
-        File selectedFile = chooser.showOpenDialog(currentSongLabel.getScene().getWindow());
-        if (selectedFile == null) {
-            return;
-        }
+        pianoStage.show();
+        pianoStage.toFront();
+    }
 
-        int previousSize = playlist.size();
-        int index = playlist.add(selectedFile.toPath());
-        if (playlist.size() != previousSize) {
-            markPlaylistModified();
-        }
-        refreshPlaylistView(index);
-        loadPlaylistIndex(index);
+    @FXML
+    private void handleShowAbout() {
+        Alert about = new Alert(Alert.AlertType.INFORMATION);
+        about.setTitle("Sobre o SuperMídia MIDI Player");
+        about.setHeaderText("SuperMídia MIDI Player · versão 0.1.0");
+        about.setContentText("Player MIDI desenvolvido para apresentações ao vivo.\n\n"
+                + "Site: https://www.supermidiaalfenas.com.br\n"
+                + "Projeto: https://github.com/neny777/supermidia-midi-player\n\n"
+                + "Tipografia Source Sans 3 · licença OFL 1.1");
+        about.initOwner(currentSongLabel.getScene().getWindow());
+        about.showAndWait();
     }
 
     @FXML
@@ -474,12 +458,13 @@ public final class MainController {
         MidiOutputDevice selection = midiOutputComboBox.getSelectionModel().getSelectedItem();
         try {
             engine.selectOutput(selection);
-            midiOutputStatusLabel.setText(selection == null
-                    ? "Saída MIDI desconectada" : "Saída: " + selection.name());
-            updateCurrentSongHint();
+            String outputName = selection == null ? "desconectado" : selection.name();
+            midiOutputStatusLabel.setText("MIDI: " + outputName);
+            midiOutputStatusLabel.setTooltip(new Tooltip("Saída MIDI: " + outputName));
             updateTransportControls();
         } catch (MidiUnavailableException exception) {
-            midiOutputStatusLabel.setText("Falha ao conectar a saída MIDI");
+            midiOutputStatusLabel.setText("MIDI: falha de conexão");
+            midiOutputStatusLabel.setTooltip(null);
             refreshingOutputs = true;
             midiOutputComboBox.getSelectionModel().clearSelection();
             refreshingOutputs = false;
@@ -493,7 +478,26 @@ public final class MainController {
     private void handlePlaybackMode() {
         playbackMode = automaticModeToggle.isSelected()
                 ? PlaybackMode.AUTOMATIC : PlaybackMode.MANUAL;
+        savePlaybackModePreference();
         refreshPlaybackMode();
+    }
+
+    private PlaybackMode loadPlaybackModePreference() {
+        try {
+            return preferences.getBoolean(AUTOPLAY_PREFERENCE_KEY, false)
+                    ? PlaybackMode.AUTOMATIC : PlaybackMode.MANUAL;
+        } catch (SecurityException exception) {
+            return PlaybackMode.MANUAL;
+        }
+    }
+
+    private void savePlaybackModePreference() {
+        try {
+            preferences.putBoolean(
+                    AUTOPLAY_PREFERENCE_KEY, playbackMode == PlaybackMode.AUTOMATIC);
+        } catch (SecurityException ignored) {
+            // A preferência é opcional; o player continua funcionando sem persistência.
+        }
     }
 
     @FXML
@@ -535,7 +539,7 @@ public final class MainController {
     private void handlePanic() {
         if (engine != null) {
             engine.panic();
-            midiOutputStatusLabel.setText("Panic enviado à saída MIDI");
+            statusLabel.setText("PANIC");
         }
     }
 
@@ -576,7 +580,6 @@ public final class MainController {
         progressSlider.setValue(0);
         currentTimeLabel.setText("00:00");
         durationTimeLabel.setText(formatTime(duration));
-        updateCurrentSongHint();
         updateSongCards();
     }
 
@@ -586,7 +589,6 @@ public final class MainController {
         }
         currentSongLabel.setText("Nenhuma música carregada");
         currentSongLabel.setTooltip(null);
-        currentSongHintLabel.setText("Escolha uma música na playlist");
         progressSlider.setValue(0);
         progressSlider.setMax(1);
         currentTimeLabel.setText("00:00");
@@ -599,36 +601,54 @@ public final class MainController {
         }
         updateMixerControls("Nenhuma música carregada");
         displayedLyricIndex = Integer.MIN_VALUE;
-        lyricsListView.getItems().clear();
-        lyricsSongLabel.setText("Nenhuma música carregada");
         refreshLyricsAtTick(0);
         updateSongCards();
         updateTransportControls();
     }
 
     private void configureControlListeners() {
+        configureScaledSlider(transposeSlider, transposeMenuButton, 1,
+                MainController::formatSemitones);
+        configureScaledSlider(speedSlider, speedMenuButton, 5,
+                value -> value + "%");
+        configureScaledSlider(masterVolumeSlider, masterVolumeMenuButton, 5,
+                value -> value + "%");
+
         transposeSlider.valueProperty().addListener((ignored, oldValue, newValue) -> {
-            int transpose = newValue.intValue();
-            transposeValueLabel.setText(formatSemitones(transpose));
+            int value = roundedSliderValue(newValue.doubleValue(), 1);
+            transposeMenuButton.setText(formatSemitones(value));
             if (engine != null) {
-                engine.setTranspose(transpose);
+                engine.setTranspose(value);
             }
         });
         speedSlider.valueProperty().addListener((ignored, oldValue, newValue) -> {
-            long percent = Math.round(newValue.doubleValue());
-            speedValueLabel.setText(percent + "%");
+            int value = roundedSliderValue(newValue.doubleValue(), 5);
+            speedMenuButton.setText(value + "%");
             if (engine != null) {
-                engine.setTempoFactor((float) (percent / 100.0));
+                engine.setTempoFactor(value / 100.0f);
             }
         });
         masterVolumeSlider.valueProperty().addListener((ignored, oldValue, newValue) -> {
-            long percent = Math.round(newValue.doubleValue());
-            masterVolumeValueLabel.setText(percent + "%");
+            int value = roundedSliderValue(newValue.doubleValue(), 5);
+            masterVolumeMenuButton.setText(value + "%");
             if (engine != null) {
-                engine.setMasterVolume(percent / 100.0);
+                engine.setMasterVolume(value / 100.0);
             }
         });
         progressSlider.setOnMouseReleased(ignored -> seekToSliderPosition());
+    }
+
+    private void configureScaledSlider(Slider slider,
+                                       MenuButton menuButton,
+                                       int step,
+                                       IntFunction<String> formatter) {
+        int value = roundedSliderValue(slider.getValue(), step);
+        slider.setValue(value);
+        menuButton.setText(formatter.apply(value));
+    }
+
+    private int roundedSliderValue(double value, int step) {
+        return (int) Math.round(value / step) * step;
     }
 
     private void configurePlaylistView() {
@@ -655,27 +675,14 @@ public final class MainController {
                 (ignored, oldValue, newValue) -> updatePlaylistEditingButtons());
     }
 
-    private void configureLyricsView() {
-        lyricsListView.setItems(FXCollections.observableArrayList());
-        lyricsListView.setCellFactory(ignored -> new ListCell<>() {
-            @Override
-            protected void updateItem(LyricLine line, boolean empty) {
-                super.updateItem(line, empty);
-                if (empty || line == null) {
-                    setText(null);
-                    return;
-                }
-                setText(String.format("%02d  %s", getIndex() + 1, line.text()));
-            }
-        });
-    }
-
     private void configureMixerView() {
         for (int channel = 0; channel < MIDI_CHANNEL_COUNT; channel++) {
             mixerChannelStrips[channel] = createMixerChannelStrip(channel);
+            HBox bank = channel < MIXER_BANK_SIZE
+                    ? mixerBankOneContainer : mixerBankTwoContainer;
+            bank.getChildren().add(mixerChannelStrips[channel]);
         }
         updateMixerControls("Nenhuma música carregada");
-        showMixerBank(0);
     }
 
     private VBox createMixerChannelStrip(int channel) {
@@ -683,17 +690,10 @@ public final class MainController {
         activity.getStyleClass().add("activity-dot");
         channelActivityLabels[channel] = activity;
 
-        Label channelLabel = new Label(String.format("CH %02d", channel + 1));
+        Label channelLabel = new Label(String.format("%02d", channel + 1));
         channelLabel.getStyleClass().add("mixer-channel-number");
 
-        Label nameLabel = new Label("Canal " + (channel + 1));
-        nameLabel.setWrapText(true);
-        nameLabel.setMaxWidth(Double.MAX_VALUE);
-        nameLabel.setAlignment(Pos.CENTER);
-        nameLabel.getStyleClass().add("mixer-track-name");
-        channelNameLabels[channel] = nameLabel;
-
-        Label instrumentLabel = new Label("Sem eventos");
+        Label instrumentLabel = new Label("SEM SOM");
         instrumentLabel.setWrapText(true);
         instrumentLabel.setMaxWidth(Double.MAX_VALUE);
         instrumentLabel.setAlignment(Pos.CENTER);
@@ -704,7 +704,8 @@ public final class MainController {
         volumeSlider.setOrientation(Orientation.VERTICAL);
         volumeSlider.setBlockIncrement(1);
         volumeSlider.setMajorTickUnit(16);
-        volumeSlider.setMaxHeight(Double.MAX_VALUE);
+        volumeSlider.setPrefHeight(150);
+        volumeSlider.setMaxHeight(170);
         channelVolumeSliders[channel] = volumeSlider;
 
         Label volumeLabel = new Label("100");
@@ -731,7 +732,7 @@ public final class MainController {
         });
         channelSoloButtons[channel] = soloButton;
 
-        HBox stateButtons = new HBox(6, muteButton, soloButton);
+        HBox stateButtons = new HBox(3, muteButton, soloButton);
         HBox.setHgrow(muteButton, Priority.ALWAYS);
         HBox.setHgrow(soloButton, Priority.ALWAYS);
 
@@ -743,13 +744,12 @@ public final class MainController {
             }
         });
 
-        VBox strip = new VBox(7,
-                activity, channelLabel, nameLabel, instrumentLabel,
-                volumeSlider, volumeLabel, stateButtons);
+        VBox strip = new VBox(4,
+                channelLabel, instrumentLabel, volumeSlider,
+                volumeLabel, stateButtons, activity);
         strip.setAlignment(Pos.TOP_CENTER);
-        strip.setMaxWidth(Double.MAX_VALUE);
+        strip.setMaxWidth(90);
         strip.getStyleClass().add("mixer-channel-strip");
-        VBox.setVgrow(volumeSlider, Priority.ALWAYS);
         HBox.setHgrow(strip, Priority.ALWAYS);
         return strip;
     }
@@ -778,38 +778,72 @@ public final class MainController {
     private void updateMixerControls(String songName) {
         updatingMixerControls = true;
         try {
-            mixerSongLabel.setText(songName);
+            boolean songLoaded = engine != null && engine.hasSequence();
             for (int channel = 0; channel < MIDI_CHANNEL_COUNT; channel++) {
                 MidiChannelInfo info = currentSongAnalysis.channel(channel);
-                channelNameLabels[channel].setText(info.trackName());
-                channelNameLabels[channel].setTooltip(new Tooltip(info.trackName()));
-                channelInstrumentLabels[channel].setText(info.instrumentName());
-                channelInstrumentLabels[channel].setTooltip(new Tooltip(info.instrumentName()));
-                channelVolumeSliders[channel].setValue(info.initialVolume());
-                channelVolumeLabels[channel].setText(Integer.toString(info.initialVolume()));
+                String instrument = songLoaded && info.used()
+                        ? abbreviatedInstrument(info, channel) : "";
+                channelInstrumentLabels[channel].setText(instrument);
+                channelInstrumentLabels[channel].setTooltip(songLoaded && info.used()
+                        ? new Tooltip(info.instrumentName() + "\n" + info.trackName()) : null);
+                channelVolumeSliders[channel].setValue(
+                        songLoaded ? info.initialVolume() : 100);
+                channelVolumeLabels[channel].setText(
+                        songLoaded ? Integer.toString(info.initialVolume()) : "");
+                channelVolumeSliders[channel].setDisable(!songLoaded);
+                channelMuteButtons[channel].setDisable(!songLoaded);
+                channelSoloButtons[channel].setDisable(!songLoaded);
                 channelMuteButtons[channel].setSelected(false);
                 channelSoloButtons[channel].setSelected(false);
+                channelActivityLabels[channel].setVisible(songLoaded);
                 channelActivityLabels[channel].getStyleClass().remove("mixer-active");
                 mixerChannelStrips[channel].getStyleClass().remove("mixer-unused-channel");
-                if (!info.used()) {
+                if (songLoaded && !info.used()) {
                     mixerChannelStrips[channel].getStyleClass().add("mixer-unused-channel");
                 }
             }
         } finally {
             updatingMixerControls = false;
         }
-        resetMixerButton.setDisable(engine == null || !engine.hasSequence());
     }
 
-    private void showMixerBank(int bank) {
-        currentMixerBank = Math.max(0, Math.min(1, bank));
-        mixerBankOneButton.setSelected(currentMixerBank == 0);
-        mixerBankTwoButton.setSelected(currentMixerBank == 1);
-        mixerChannelsContainer.getChildren().clear();
-        int firstChannel = currentMixerBank * MIXER_BANK_SIZE;
-        for (int channel = firstChannel; channel < firstChannel + MIXER_BANK_SIZE; channel++) {
-            mixerChannelsContainer.getChildren().add(mixerChannelStrips[channel]);
+    private String abbreviatedInstrument(MidiChannelInfo info, int channel) {
+        if (channel == 9) {
+            return "DRUM";
         }
+        String name = info.instrumentName().toUpperCase(Locale.ROOT);
+        if (name.contains("ELECTRIC PIANO")) {
+            return "E.PIANO";
+        }
+        if (name.contains("PIANO")) {
+            return "PIANO";
+        }
+        if (name.contains("ELECTRIC") && name.contains("BASS")) {
+            return "E.BASS";
+        }
+        if (name.contains("BASS")) {
+            return "BASS";
+        }
+        if (name.contains("GUITAR")) {
+            return name.contains("ELECTRIC") ? "E.GUIT" : "GUITAR";
+        }
+        if (name.contains("STRING")) {
+            return "STRINGS";
+        }
+        if (name.contains("ORGAN")) {
+            return "ORGAN";
+        }
+        if (name.contains("BRASS")) {
+            return "BRASS";
+        }
+        if (name.contains("CHOIR") || name.contains("VOICE")) {
+            return "CHOIR";
+        }
+        if (name.contains("SYNTH")) {
+            return "SYNTH";
+        }
+        String firstWord = name.split("\\s+", 2)[0];
+        return firstWord.length() <= 8 ? firstWord : firstWord.substring(0, 8);
     }
 
     private void refreshMixerActivity() {
@@ -937,22 +971,13 @@ public final class MainController {
     private void updateSongCards() {
         playlist.next().ifPresentOrElse(item -> {
             nextSongLabel.setText(item.displayName());
-            nextSongHintLabel.setText(playbackMode == PlaybackMode.AUTOMATIC
-                    ? "Iniciará automaticamente" : "Ficará preparada ao final");
+            nextSongLabel.setTooltip(new Tooltip(item.displayName()));
         }, () -> {
             nextSongLabel.setText(playlist.isEmpty()
-                    ? "A playlist ainda está vazia" : "Fim da playlist");
-            nextSongHintLabel.setText(playlist.isEmpty()
-                    ? "Adicione músicas na área Playlist" : "Nenhuma música depois desta");
+                    ? "Playlist vazia" : "Fim da playlist");
+            nextSongLabel.setTooltip(null);
         });
         playlistListView.refresh();
-    }
-
-    private void updateCurrentSongHint() {
-        if (engine != null && engine.hasSequence()) {
-            currentSongHintLabel.setText(formatTime(engine.getDurationMicroseconds())
-                    + (engine.hasOutput() ? " · pronta para tocar" : " · selecione uma saída MIDI"));
-        }
     }
 
     private void updateTransportControls() {
@@ -981,18 +1006,14 @@ public final class MainController {
 
     private void refreshPlaybackMode() {
         automaticModeToggle.setSelected(playbackMode == PlaybackMode.AUTOMATIC);
-        automaticModeToggle.setText(playbackMode.label());
-        playbackModeLabel.setText(playbackMode.description());
         updateSongCards();
     }
 
     private void showPresentation() {
         playlistView.setVisible(false);
         playlistView.setManaged(false);
-        lyricsView.setVisible(false);
-        lyricsView.setManaged(false);
-        mixerView.setVisible(false);
-        mixerView.setManaged(false);
+        settingsView.setVisible(false);
+        settingsView.setManaged(false);
         presentationView.setVisible(true);
         presentationView.setManaged(true);
         presentationNavButton.setSelected(true);
@@ -1005,8 +1026,6 @@ public final class MainController {
             currentLyrics = MidiLyrics.empty();
         }
         displayedLyricIndex = Integer.MIN_VALUE;
-        lyricsSongLabel.setText(item.displayName());
-        lyricsListView.getItems().setAll(currentLyrics.lines());
         refreshLyricsAtTick(0);
     }
 
@@ -1015,39 +1034,106 @@ public final class MainController {
         if (lyricIndex == displayedLyricIndex) {
             return;
         }
+
+        if (lyricScrollTransition != null) {
+            showLyricsImmediately(displayedLyricIndex);
+        }
+        int previousIndex = displayedLyricIndex;
         displayedLyricIndex = lyricIndex;
 
         if (currentLyrics.isEmpty()) {
-            setLyricLabels("", "Este arquivo MIDI não contém letras incorporadas", "");
+            stopLyricScrollAnimation();
+            setLyricLabels("", "", "");
             stageLyricsStatusLabel.setText("SEM LETRA INCORPORADA");
-            lyricsCountLabel.setText("Sem letra");
-            lyricsListView.getSelectionModel().clearSelection();
             return;
         }
 
         if (lyricIndex < 0) {
-            setLyricLabels("", "Aguardando entrada da letra…", lyricText(0));
+            stopLyricScrollAnimation();
+            setLyricLabels("", "", lyricText(0));
             stageLyricsStatusLabel.setText("LETRA SINCRONIZADA · 0 / " + currentLyrics.size());
-            lyricsCountLabel.setText("0 / " + currentLyrics.size() + " linhas");
-            lyricsListView.getSelectionModel().clearSelection();
             return;
         }
 
-        setLyricLabels(lyricText(lyricIndex - 1), lyricText(lyricIndex), lyricText(lyricIndex + 1));
+        boolean nextSequentialLine = previousIndex >= -1
+                && lyricIndex == previousIndex + 1
+                && lyricsLinesContainer.getScene() != null;
+        if (nextSequentialLine) {
+            animateLyricsForward(lyricIndex);
+        } else {
+            showLyricsImmediately(lyricIndex);
+        }
         stageLyricsStatusLabel.setText("LETRA SINCRONIZADA · "
                 + (lyricIndex + 1) + " / " + currentLyrics.size());
-        lyricsCountLabel.setText((lyricIndex + 1) + " / " + currentLyrics.size() + " linhas");
-        lyricsListView.getSelectionModel().select(lyricIndex);
-        lyricsListView.scrollTo(Math.max(0, lyricIndex - 2));
     }
 
-    private void setLyricLabels(String previous, String current, String next) {
+    private void configureLyricsViewport() {
+        Rectangle clip = new Rectangle();
+        clip.widthProperty().bind(lyricsViewport.widthProperty());
+        clip.heightProperty().bind(lyricsViewport.heightProperty());
+        lyricsViewport.setClip(clip);
+    }
+
+    private void animateLyricsForward(int lyricIndex) {
+        stopLyricScrollAnimation();
+        stageIncomingLyricLabel.setText(lyricText(lyricIndex + 1));
+
+        double lineDistance = stageCurrentLyricLabel.getLayoutY()
+                - stagePreviousLyricLabel.getLayoutY();
+        if (lineDistance <= 0) {
+            lineDistance = 60;
+        }
+
+        lyricScrollTransition = new TranslateTransition(
+                LYRIC_SCROLL_DURATION, lyricsLinesContainer);
+        lyricScrollTransition.setFromY(0);
+        lyricScrollTransition.setToY(-lineDistance);
+        lyricScrollTransition.setInterpolator(Interpolator.EASE_BOTH);
+        lyricScrollTransition.setOnFinished(ignored -> {
+            lyricScrollTransition = null;
+            lyricsLinesContainer.setTranslateY(0);
+            setLyricLabelsForIndex(lyricIndex);
+        });
+        lyricScrollTransition.play();
+    }
+
+    private void showLyricsImmediately(int lyricIndex) {
+        stopLyricScrollAnimation();
+        if (lyricIndex < 0) {
+            setLyricLabels("", "", lyricText(0));
+            return;
+        }
+        setLyricLabelsForIndex(lyricIndex);
+    }
+
+    private void setLyricLabelsForIndex(int lyricIndex) {
+        setLyricLabels(
+                lyricText(lyricIndex - 1),
+                lyricText(lyricIndex),
+                lyricText(lyricIndex + 1));
+    }
+
+    private void stopLyricScrollAnimation() {
+        if (lyricScrollTransition != null) {
+            lyricScrollTransition.stop();
+            lyricScrollTransition = null;
+        }
+        if (lyricsLinesContainer != null) {
+            lyricsLinesContainer.setTranslateY(0);
+        }
+        if (stageIncomingLyricLabel != null) {
+            stageIncomingLyricLabel.setText("");
+        }
+    }
+
+    private void setLyricLabels(String previous,
+                                String current,
+                                String next) {
         stagePreviousLyricLabel.setText(previous);
         stageCurrentLyricLabel.setText(current);
+        stageCurrentLyricLabel.setVisible(!current.isBlank());
         stageNextLyricLabel.setText(next);
-        lyricsPreviousLabel.setText(previous);
-        lyricsCurrentLabel.setText(current);
-        lyricsNextLabel.setText(next);
+        stageIncomingLyricLabel.setText("");
     }
 
     private String lyricText(int index) {
@@ -1072,7 +1158,7 @@ public final class MainController {
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
                 "A playlist atual possui alterações não salvas. Deseja descartá-las?",
                 ButtonType.OK, ButtonType.CANCEL);
-        confirmation.setTitle("SuperMidia Live");
+        confirmation.setTitle("SuperMídia MIDI Player");
         confirmation.setHeaderText("Abrir outra playlist");
         confirmation.initOwner(playlistListView.getScene().getWindow());
         return confirmation.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
@@ -1115,7 +1201,7 @@ public final class MainController {
 
     private void showError(String title, String message, Exception exception) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle("SuperMidia Live");
+        alert.setTitle("SuperMídia MIDI Player");
         alert.setHeaderText(title);
         alert.setContentText(message + (exception.getMessage() == null
                 ? "" : "\n\nDetalhe: " + exception.getMessage()));

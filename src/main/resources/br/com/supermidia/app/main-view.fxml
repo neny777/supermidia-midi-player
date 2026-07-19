@@ -2,13 +2,17 @@
 
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.CustomMenuItem?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
-<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.MenuButton?>
 <?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.ColumnConstraints?>
 <?import javafx.scene.layout.GridPane?>
@@ -26,149 +30,151 @@
     </fx:define>
 
     <top>
-        <HBox alignment="CENTER_LEFT" spacing="18" styleClass="top-bar">
-            <VBox spacing="2" HBox.hgrow="ALWAYS">
-                <Label text="SUPERMIDIA" styleClass="brand-label"/>
-                <Label text="Live MIDI Performance" styleClass="brand-subtitle"/>
-            </VBox>
-
-            <VBox spacing="3" styleClass="device-chip output-device-chip">
-                <Label text="SAÍDA MIDI" styleClass="micro-label"/>
-                <HBox alignment="CENTER_LEFT" spacing="5">
-                    <ComboBox fx:id="midiOutputComboBox" promptText="Selecionar saída"
-                              onAction="#handleMidiOutputSelection" styleClass="device-combo"/>
-                    <Button text="↻" onAction="#handleRefreshMidiOutputs" styleClass="refresh-button"/>
+        <HBox alignment="CENTER_LEFT" spacing="14" styleClass="top-bar">
+            <HBox alignment="CENTER_LEFT" spacing="8" styleClass="brand-block">
+                <ImageView fitWidth="34" fitHeight="28" preserveRatio="true">
+                    <image>
+                        <Image url="@supermidia-logo.png"/>
+                    </image>
+                </ImageView>
+                <HBox alignment="CENTER_LEFT" spacing="0">
+                    <Label text="SUPER" styleClass="brand-super"/>
+                    <Label text="MÍDIA" styleClass="brand-midia"/>
                 </HBox>
-            </VBox>
+            </HBox>
 
-            <VBox spacing="3" styleClass="device-chip">
-                <Label text="CONTROLADOR" styleClass="micro-label"/>
-                <Label text="Aguardando dispositivo" styleClass="device-value"/>
-            </VBox>
+            <Separator orientation="VERTICAL"/>
 
-            <Button text="Abrir MIDI" onAction="#handleOpenMidi" styleClass="primary-button"/>
+            <HBox alignment="CENTER_LEFT" spacing="8" HBox.hgrow="ALWAYS" styleClass="current-song-header">
+                <Label text="♫" styleClass="song-note"/>
+                <Label fx:id="currentSongLabel" text="Nenhuma música carregada"
+                       wrapText="true" maxWidth="Infinity" HBox.hgrow="ALWAYS"
+                       styleClass="current-song-name"/>
+            </HBox>
+
+            <Separator orientation="VERTICAL"/>
+
+            <HBox alignment="CENTER_LEFT" spacing="6" minWidth="280"
+                  prefWidth="330" maxWidth="360"
+                  styleClass="next-song-header">
+                <Label text="Próxima:" styleClass="next-song-caption"/>
+                <Label fx:id="nextSongLabel" text="Playlist vazia" maxWidth="Infinity"
+                       maxHeight="36" wrapText="true" textOverrun="ELLIPSIS"
+                       HBox.hgrow="ALWAYS"
+                       styleClass="next-song-name"/>
+            </HBox>
+
+            <HBox alignment="CENTER" spacing="7" styleClass="controller-chip">
+                <Label text="●" styleClass="connection-dot-disconnected"/>
+                <Label text="Controladora: nenhuma" styleClass="controller-value"/>
+            </HBox>
+
             <Button fx:id="panicButton" text="PANIC" disable="true"
-                    onAction="#handlePanic" styleClass="panic-button"/>
+                    onAction="#handlePanic" styleClass="panic-button">
+                <tooltip>
+                    <Tooltip text="Interrompe imediatamente todas as notas e sons MIDI."/>
+                </tooltip>
+            </Button>
         </HBox>
     </top>
 
     <left>
-        <VBox spacing="8" styleClass="sidebar">
-            <Label text="ESPAÇOS" styleClass="section-caption"/>
-            <ToggleButton fx:id="presentationNavButton" text="Apresentação" selected="true"
+        <VBox alignment="TOP_CENTER" spacing="10" styleClass="sidebar">
+            <ToggleButton fx:id="presentationNavButton" selected="true"
                           toggleGroup="$navigationGroup" onAction="#handleShowPresentation"
-                          styleClass="nav-button" maxWidth="Infinity"/>
-            <ToggleButton fx:id="playlistNavButton" text="Playlist"
+                          styleClass="nav-button" maxWidth="Infinity">
+                <graphic>
+                    <VBox alignment="CENTER" spacing="4" mouseTransparent="true">
+                        <Label text="◉" styleClass="nav-icon"/>
+                        <Label text="Ao vivo" styleClass="nav-text"/>
+                    </VBox>
+                </graphic>
+            </ToggleButton>
+            <ToggleButton fx:id="playlistNavButton"
                           toggleGroup="$navigationGroup" onAction="#handleShowPlaylist"
-                          styleClass="nav-button" maxWidth="Infinity"/>
-            <ToggleButton fx:id="mixerNavButton" text="Mixer" toggleGroup="$navigationGroup"
-                          onAction="#handleShowMixer" styleClass="nav-button" maxWidth="Infinity"/>
-            <ToggleButton fx:id="lyricsNavButton" text="Letras" toggleGroup="$navigationGroup"
-                          onAction="#handleShowLyrics" styleClass="nav-button" maxWidth="Infinity"/>
-
+                          styleClass="nav-button" maxWidth="Infinity">
+                <graphic>
+                    <VBox alignment="CENTER" spacing="4" mouseTransparent="true">
+                        <Label text="☷" styleClass="nav-icon"/>
+                        <Label text="Playlist" styleClass="nav-text"/>
+                    </VBox>
+                </graphic>
+            </ToggleButton>
+            <Button onAction="#handleOpenPiano"
+                    styleClass="nav-button" maxWidth="Infinity">
+                <graphic>
+                    <VBox alignment="CENTER" spacing="4" mouseTransparent="true">
+                        <Label text="♫" styleClass="nav-icon"/>
+                        <Label text="Piano" styleClass="nav-text"/>
+                    </VBox>
+                </graphic>
+                <tooltip>
+                    <Tooltip text="Abre o piano em uma janela separada."/>
+                </tooltip>
+            </Button>
             <Region VBox.vgrow="ALWAYS"/>
-            <Separator/>
-            <ToggleButton text="Configurações" disable="true" styleClass="nav-button" maxWidth="Infinity"/>
-
-            <VBox spacing="4" styleClass="version-card">
-                <Label text="ETAPA 5" styleClass="micro-label"/>
-                <Label text="Player · Playlist · Letras · Mixer" wrapText="true" styleClass="muted-label"/>
-            </VBox>
+            <ToggleButton fx:id="settingsNavButton"
+                          toggleGroup="$navigationGroup" onAction="#handleShowSettings"
+                          styleClass="nav-button" maxWidth="Infinity">
+                <graphic>
+                    <VBox alignment="CENTER" spacing="4" mouseTransparent="true">
+                        <Label text="⚙" styleClass="nav-icon"/>
+                        <Label text="Configurações" styleClass="nav-text, nav-text-small"/>
+                    </VBox>
+                </graphic>
+            </ToggleButton>
         </VBox>
     </left>
 
     <center>
         <StackPane>
-            <ScrollPane fx:id="presentationView" fitToWidth="true" fitToHeight="true"
-                        hbarPolicy="NEVER" styleClass="content-scroll">
-                <VBox spacing="18" styleClass="content-area">
-                    <HBox alignment="CENTER_LEFT" spacing="14">
-                        <VBox spacing="5" HBox.hgrow="ALWAYS">
-                            <Label text="APRESENTAÇÃO" styleClass="eyebrow"/>
-                            <Label text="Controle de palco" styleClass="page-title"/>
-                            <Label text="Tudo o que importa durante a música, sem distrações." styleClass="page-subtitle"/>
+            <VBox fx:id="presentationView" alignment="CENTER" spacing="12"
+                  maxWidth="1700" maxHeight="650"
+                  styleClass="content-area">
+                <VBox alignment="CENTER" spacing="8" maxHeight="280"
+                      VBox.vgrow="ALWAYS" styleClass="lyrics-card">
+                    <Label fx:id="stageLyricsStatusLabel" text="LETRA SINCRONIZADA"
+                           visible="false" managed="false"/>
+                    <StackPane fx:id="lyricsViewport" maxWidth="Infinity"
+                               VBox.vgrow="ALWAYS" styleClass="lyrics-viewport">
+                        <VBox fx:id="lyricsLinesContainer" alignment="TOP_CENTER" spacing="4"
+                              maxWidth="Infinity" StackPane.alignment="TOP_CENTER">
+                            <Label fx:id="stagePreviousLyricLabel" text="" styleClass="lyrics-line"
+                                   wrapText="true" textAlignment="CENTER" maxWidth="1200"/>
+                            <Label fx:id="stageCurrentLyricLabel" text=""
+                                   styleClass="lyrics-line" wrapText="true"
+                                   textAlignment="CENTER" maxWidth="1200"/>
+                            <Label fx:id="stageNextLyricLabel" text=""
+                                   styleClass="lyrics-line" wrapText="true"
+                                   textAlignment="CENTER" maxWidth="1200"/>
+                            <Label fx:id="stageIncomingLyricLabel" text="" styleClass="lyrics-line"
+                                   wrapText="true" textAlignment="CENTER" maxWidth="1200"/>
                         </VBox>
-
-                        <VBox alignment="CENTER_RIGHT" spacing="5">
-                            <Label text="AVANÇO DA PLAYLIST" styleClass="micro-label"/>
-                            <HBox alignment="CENTER_RIGHT" spacing="10">
-                                <Label fx:id="playbackModeLabel"
-                                       text="A próxima música ficará preparada" styleClass="muted-label"/>
-                                <ToggleButton fx:id="automaticModeToggle" text="Manual"
-                                              onAction="#handlePlaybackMode" styleClass="mode-toggle"/>
-                            </HBox>
-                        </VBox>
-                    </HBox>
-
-                    <HBox spacing="14">
-                        <VBox spacing="8" styleClass="song-card" HBox.hgrow="ALWAYS">
-                            <Label text="AGORA" styleClass="micro-label accent-text"/>
-                            <Label fx:id="currentSongLabel" text="Nenhuma música carregada"
-                                   styleClass="song-title" wrapText="true"/>
-                            <Label fx:id="currentSongHintLabel"
-                                   text="Abra um arquivo MIDI para preparar a apresentação" styleClass="muted-label"/>
-                        </VBox>
-
-                        <VBox spacing="8" styleClass="song-card next-song-card" HBox.hgrow="ALWAYS">
-                            <Label text="PRÓXIMA" styleClass="micro-label"/>
-                            <Label fx:id="nextSongLabel" text="A playlist ainda está vazia"
-                                   styleClass="song-title secondary-song-title" wrapText="true"/>
-                            <Label fx:id="nextSongHintLabel" text="Adicione músicas na área Playlist"
-                                   styleClass="muted-label"/>
-                        </VBox>
-                    </HBox>
-
-                    <VBox alignment="CENTER" spacing="12" styleClass="lyrics-card" VBox.vgrow="ALWAYS">
-                        <Label fx:id="stageLyricsStatusLabel" text="LETRA SINCRONIZADA" styleClass="micro-label"/>
-                        <Label fx:id="stagePreviousLyricLabel" text="" styleClass="lyrics-previous"
-                               wrapText="true" textAlignment="CENTER"/>
-                        <Label fx:id="stageCurrentLyricLabel" text="A letra da música aparecerá aqui" styleClass="lyrics-current"
-                               wrapText="true" textAlignment="CENTER"/>
-                        <Label fx:id="stageNextLyricLabel" text="com a próxima linha preparada logo abaixo" styleClass="lyrics-next"
-                               wrapText="true" textAlignment="CENTER"/>
-                    </VBox>
-
-                    <GridPane hgap="14" vgap="14">
-                        <columnConstraints>
-                            <ColumnConstraints percentWidth="33.333" hgrow="ALWAYS"/>
-                            <ColumnConstraints percentWidth="33.333" hgrow="ALWAYS"/>
-                            <ColumnConstraints percentWidth="33.333" hgrow="ALWAYS"/>
-                        </columnConstraints>
-
-                        <VBox spacing="10" styleClass="quick-control" GridPane.columnIndex="0">
-                            <HBox alignment="CENTER_LEFT">
-                                <Label text="TRANSPOSE" styleClass="micro-label" HBox.hgrow="ALWAYS"/>
-                                <Label fx:id="transposeValueLabel" text="0" styleClass="control-value"/>
-                            </HBox>
-                            <Slider fx:id="transposeSlider" min="-12" max="12" value="0"
-                                    blockIncrement="1" majorTickUnit="1" snapToTicks="true"/>
-                        </VBox>
-
-                        <VBox spacing="10" styleClass="quick-control" GridPane.columnIndex="1">
-                            <HBox alignment="CENTER_LEFT">
-                                <Label text="VELOCIDADE" styleClass="micro-label" HBox.hgrow="ALWAYS"/>
-                                <Label fx:id="speedValueLabel" text="100%" styleClass="control-value"/>
-                            </HBox>
-                            <Slider fx:id="speedSlider" min="50" max="150" value="100" blockIncrement="1"/>
-                        </VBox>
-
-                        <VBox spacing="10" styleClass="quick-control" GridPane.columnIndex="2">
-                            <HBox alignment="CENTER_LEFT">
-                                <Label text="ACOMPANHAMENTO" styleClass="micro-label" HBox.hgrow="ALWAYS"/>
-                                <Label fx:id="masterVolumeValueLabel" text="80%" styleClass="control-value"/>
-                            </HBox>
-                            <Slider fx:id="masterVolumeSlider" min="0" max="100" value="80" blockIncrement="1"/>
-                        </VBox>
-                    </GridPane>
+                    </StackPane>
                 </VBox>
-            </ScrollPane>
 
-            <VBox fx:id="playlistView" visible="false" managed="false" spacing="18" styleClass="content-area">
+                <HBox spacing="8" styleClass="mixer-banks">
+                    <VBox alignment="TOP_CENTER" spacing="4" HBox.hgrow="ALWAYS"
+                          styleClass="mixer-bank, mixer-bank-active">
+                        <HBox fx:id="mixerBankOneContainer" alignment="TOP_CENTER" spacing="4"
+                              fillHeight="false" maxWidth="Infinity"/>
+                    </VBox>
+                    <VBox alignment="TOP_CENTER" spacing="4" HBox.hgrow="ALWAYS"
+                          styleClass="mixer-bank, mixer-bank-inactive">
+                        <HBox fx:id="mixerBankTwoContainer" alignment="TOP_CENTER" spacing="4"
+                              fillHeight="false" maxWidth="Infinity"/>
+                    </VBox>
+                </HBox>
+            </VBox>
+
+            <VBox fx:id="playlistView" visible="false" managed="false" spacing="16"
+                  styleClass="content-area">
                 <HBox alignment="CENTER_LEFT" spacing="14">
-                    <VBox spacing="5" HBox.hgrow="ALWAYS">
-                        <Label text="REPERTÓRIO" styleClass="eyebrow"/>
-                        <Label text="Playlist" styleClass="page-title"/>
-                        <Label text="Prepare e ordene as músicas antes da apresentação." styleClass="page-subtitle"/>
+                    <VBox spacing="4" HBox.hgrow="ALWAYS">
+                        <Label text="PLAYLIST" styleClass="eyebrow"/>
+                        <Label text="Repertório" styleClass="page-title"/>
+                        <Label text="Adicione, organize e prepare as músicas antes da apresentação."
+                               styleClass="page-subtitle"/>
                     </VBox>
                     <Label fx:id="playlistFileLabel" text="Playlist não salva" styleClass="muted-label"/>
                 </HBox>
@@ -179,9 +185,9 @@
                     <Button fx:id="savePlaylistButton" text="Salvar playlist" disable="true"
                             onAction="#handleSavePlaylist" styleClass="secondary-button"/>
                     <Region HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="moveUpButton" text="Mover para cima" disable="true"
+                    <Button fx:id="moveUpButton" text="Subir" disable="true"
                             onAction="#handleMovePlaylistItemUp" styleClass="secondary-button"/>
-                    <Button fx:id="moveDownButton" text="Mover para baixo" disable="true"
+                    <Button fx:id="moveDownButton" text="Descer" disable="true"
                             onAction="#handleMovePlaylistItemDown" styleClass="secondary-button"/>
                     <Button fx:id="removePlaylistButton" text="Remover" disable="true"
                             onAction="#handleRemovePlaylistItem" styleClass="danger-button"/>
@@ -197,96 +203,167 @@
                 </HBox>
             </VBox>
 
-            <VBox fx:id="lyricsView" visible="false" managed="false" spacing="18" styleClass="content-area">
-                <HBox alignment="CENTER_LEFT" spacing="14">
-                    <VBox spacing="5" HBox.hgrow="ALWAYS">
-                        <Label text="LETRAS" styleClass="eyebrow"/>
-                        <Label text="Leitura sincronizada" styleClass="page-title"/>
-                        <Label text="Acompanhe o texto incorporado ao arquivo MIDI." styleClass="page-subtitle"/>
-                    </VBox>
-                    <VBox alignment="CENTER_RIGHT" spacing="4">
-                        <Label fx:id="lyricsSongLabel" text="Nenhuma música carregada" styleClass="song-title secondary-song-title"/>
-                        <Label fx:id="lyricsCountLabel" text="Sem letra" styleClass="muted-label"/>
-                    </VBox>
-                </HBox>
-
-                <VBox alignment="CENTER" spacing="14" styleClass="lyrics-detail-card">
-                    <Label fx:id="lyricsPreviousLabel" text="" styleClass="lyrics-detail-previous"
-                           wrapText="true" textAlignment="CENTER"/>
-                    <Label fx:id="lyricsCurrentLabel" text="Carregue uma música para visualizar a letra"
-                           styleClass="lyrics-detail-current" wrapText="true" textAlignment="CENTER"/>
-                    <Label fx:id="lyricsNextLabel" text="" styleClass="lyrics-detail-next"
-                           wrapText="true" textAlignment="CENTER"/>
+            <VBox fx:id="settingsView" visible="false" managed="false" spacing="18"
+                  styleClass="content-area, settings-view">
+                <VBox spacing="4">
+                    <Label text="CONFIGURAÇÕES" styleClass="eyebrow"/>
+                    <Label text="Sistema e dispositivos" styleClass="page-title"/>
+                    <Label text="Ajustes que não precisam ocupar a tela de apresentação."
+                           styleClass="page-subtitle"/>
                 </VBox>
 
-                <Label text="TEXTO COMPLETO" styleClass="micro-label"/>
-                <ListView fx:id="lyricsListView" styleClass="lyrics-list" VBox.vgrow="ALWAYS"/>
-            </VBox>
-
-            <ScrollPane fx:id="mixerView" visible="false" managed="false" fitToWidth="true"
-                        hbarPolicy="NEVER" styleClass="content-scroll">
-              <VBox spacing="18" styleClass="content-area">
-                <HBox alignment="CENTER_LEFT" spacing="14">
-                    <VBox spacing="5" HBox.hgrow="ALWAYS">
-                        <Label text="MIXER MIDI" styleClass="eyebrow"/>
-                        <Label text="16 canais" styleClass="page-title"/>
-                        <Label text="Volume, Mute e Solo enviados diretamente ao módulo de som." styleClass="page-subtitle"/>
-                    </VBox>
-                    <VBox alignment="CENTER_RIGHT" spacing="4">
-                        <Label fx:id="mixerSongLabel" text="Nenhuma música carregada"
-                               styleClass="song-title secondary-song-title"/>
-                        <Label text="M = Mute · S = Solo" styleClass="muted-label"/>
-                    </VBox>
-                </HBox>
-
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <ToggleButton fx:id="mixerBankOneButton" text="Canais 1–8" selected="true"
-                                  onAction="#handleMixerBankOne" styleClass="bank-button"/>
-                    <ToggleButton fx:id="mixerBankTwoButton" text="Canais 9–16"
-                                  onAction="#handleMixerBankTwo" styleClass="bank-button"/>
-                    <Region HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="resetMixerButton" text="Restaurar mixagem original" disable="true"
-                            onAction="#handleResetMixer" styleClass="secondary-button"/>
-                </HBox>
-
-                <HBox fx:id="mixerChannelsContainer" alignment="BOTTOM_CENTER" spacing="10"
-                      styleClass="mixer-channels" VBox.vgrow="ALWAYS"/>
-
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Label text="●" styleClass="activity-dot mixer-active"/>
-                    <Label text="Atividade MIDI recebida no canal" styleClass="muted-label"/>
-                    <Region HBox.hgrow="ALWAYS"/>
-                    <Label text="O canal 10 é reservado para bateria e percussão GM."
+                <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Saída MIDI" styleClass="settings-title"/>
+                    <Label text="Selecione o módulo ou sintetizador que receberá a reprodução."
                            styleClass="muted-label"/>
-                </HBox>
-              </VBox>
-            </ScrollPane>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <ComboBox fx:id="midiOutputComboBox" promptText="Selecionar saída MIDI"
+                                  onAction="#handleMidiOutputSelection" styleClass="device-combo"
+                                  HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Button text="Atualizar" onAction="#handleRefreshMidiOutputs"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                </VBox>
+
+                <VBox spacing="10" styleClass="settings-card">
+                    <Label text="Controladora" styleClass="settings-title"/>
+                    <Label text="A configuração da SMC-Mixer será concluída após a identificação das mensagens MIDI."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="10" styleClass="settings-card">
+                    <Label text="Sobre" styleClass="settings-title"/>
+                    <Label text="Informações do aplicativo, versão e links do projeto."
+                           styleClass="muted-label"/>
+                    <Button text="Sobre o SuperMídia MIDI Player" onAction="#handleShowAbout"
+                            styleClass="secondary-button"/>
+                </VBox>
+                <Region VBox.vgrow="ALWAYS"/>
+            </VBox>
         </StackPane>
     </center>
 
     <bottom>
-        <VBox spacing="10" styleClass="transport-bar">
-            <HBox alignment="CENTER_LEFT" spacing="12">
+        <VBox spacing="0" styleClass="transport-area">
+            <GridPane styleClass="control-bar">
+                <columnConstraints>
+                    <ColumnConstraints percentWidth="33.333"/>
+                    <ColumnConstraints percentWidth="33.334"/>
+                    <ColumnConstraints percentWidth="33.333"/>
+                </columnConstraints>
+
+                <HBox alignment="CENTER_LEFT" spacing="10" styleClass="transport-zone">
+                    <Label fx:id="statusLabel" text="SEM MÚSICA" visible="false" managed="false"/>
+                    <Button fx:id="previousButton" text="⏮" disable="true"
+                            onAction="#handlePrevious" styleClass="transport-button"/>
+                    <Button fx:id="stopButton" text="⏹" disable="true"
+                            onAction="#handleStop" styleClass="transport-button"/>
+                    <Button fx:id="playButton" text="▶" disable="true"
+                            onAction="#handlePlay" styleClass="play-button"/>
+                    <Button fx:id="pauseButton" text="⏸" disable="true"
+                            onAction="#handlePause" styleClass="transport-button"/>
+                    <Button fx:id="nextButton" text="⏭" disable="true"
+                            onAction="#handleNext" styleClass="transport-button"/>
+                    <Separator orientation="VERTICAL"/>
+                </HBox>
+
+                <HBox alignment="CENTER" spacing="6" GridPane.columnIndex="1"
+                      styleClass="adjustment-zone">
+                    <VBox alignment="CENTER" spacing="2" styleClass="selector-block">
+                        <Label text="TOM" styleClass="micro-label"/>
+                        <MenuButton fx:id="transposeMenuButton" text="0"
+                                    styleClass="quick-popup-control">
+                            <items>
+                                <CustomMenuItem hideOnClick="false" styleClass="slider-menu-item">
+                                    <content>
+                                        <VBox alignment="CENTER" spacing="6" styleClass="vertical-slider-popup">
+                                            <Label text="TOM" styleClass="popup-slider-title"/>
+                                            <Slider fx:id="transposeSlider" orientation="VERTICAL"
+                                                    min="-12" max="12" value="0"
+                                                    prefWidth="120" prefHeight="450"
+                                                    blockIncrement="1" majorTickUnit="6" minorTickCount="5"
+                                                    showTickMarks="true" showTickLabels="true" snapToTicks="true"
+                                                    styleClass="vertical-popup-slider"/>
+                                        </VBox>
+                                    </content>
+                                </CustomMenuItem>
+                            </items>
+                        </MenuButton>
+                    </VBox>
+                    <VBox alignment="CENTER" spacing="2" styleClass="selector-block">
+                        <Label text="VELOCIDADE" styleClass="micro-label"/>
+                        <MenuButton fx:id="speedMenuButton" text="100%"
+                                    styleClass="quick-popup-control">
+                            <items>
+                                <CustomMenuItem hideOnClick="false" styleClass="slider-menu-item">
+                                    <content>
+                                        <VBox alignment="CENTER" spacing="6" styleClass="vertical-slider-popup">
+                                            <Label text="VELOCIDADE" styleClass="popup-slider-title"/>
+                                            <Slider fx:id="speedSlider" orientation="VERTICAL"
+                                                    min="50" max="150" value="100"
+                                                    prefWidth="120" prefHeight="450"
+                                                    blockIncrement="5" majorTickUnit="25" minorTickCount="4"
+                                                    showTickMarks="true" showTickLabels="true" snapToTicks="true"
+                                                    styleClass="vertical-popup-slider"/>
+                                        </VBox>
+                                    </content>
+                                </CustomMenuItem>
+                            </items>
+                        </MenuButton>
+                    </VBox>
+                    <VBox alignment="CENTER" spacing="2" styleClass="selector-block">
+                        <Label text="VOLUME" styleClass="micro-label"/>
+                        <MenuButton fx:id="masterVolumeMenuButton" text="100%"
+                                    styleClass="quick-popup-control">
+                            <items>
+                                <CustomMenuItem hideOnClick="false" styleClass="slider-menu-item">
+                                    <content>
+                                        <VBox alignment="CENTER" spacing="6" styleClass="vertical-slider-popup">
+                                            <Label text="VOLUME" styleClass="popup-slider-title"/>
+                                            <Slider fx:id="masterVolumeSlider" orientation="VERTICAL"
+                                                    min="0" max="100" value="100"
+                                                    prefWidth="120" prefHeight="450"
+                                                    blockIncrement="5" majorTickUnit="25" minorTickCount="4"
+                                                    showTickMarks="true" showTickLabels="true" snapToTicks="true"
+                                                    styleClass="vertical-popup-slider"/>
+                                        </VBox>
+                                    </content>
+                                </CustomMenuItem>
+                            </items>
+                        </MenuButton>
+                    </VBox>
+                </HBox>
+
+                <HBox alignment="CENTER_RIGHT" spacing="10" GridPane.columnIndex="2"
+                      styleClass="mode-zone">
+                    <VBox alignment="CENTER" spacing="3" styleClass="toggle-block">
+                        <Label text="AUTOPLAY" styleClass="micro-label"/>
+                        <ToggleButton fx:id="automaticModeToggle" text="●" onAction="#handlePlaybackMode"
+                                      styleClass="switch-toggle"/>
+                    </VBox>
+                    <VBox alignment="CENTER" spacing="3" styleClass="toggle-block">
+                        <Label text="PRÉVIA" styleClass="micro-label"/>
+                        <ToggleButton text="●" disable="true" styleClass="switch-toggle">
+                            <tooltip>
+                                <Tooltip text="Função planejada para uma etapa futura."/>
+                            </tooltip>
+                        </ToggleButton>
+                    </VBox>
+                </HBox>
+            </GridPane>
+
+            <HBox alignment="CENTER_LEFT" spacing="12" styleClass="progress-bar-area">
                 <Label fx:id="currentTimeLabel" text="00:00" styleClass="time-label"/>
                 <Slider fx:id="progressSlider" value="0" disable="true" HBox.hgrow="ALWAYS"/>
                 <Label fx:id="durationTimeLabel" text="00:00" styleClass="time-label"/>
-            </HBox>
-
-            <HBox alignment="CENTER" spacing="10">
-                <Label fx:id="statusLabel" text="SEM MÚSICA" styleClass="status-badge"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Button fx:id="previousButton" text="|◀" disable="true"
-                        onAction="#handlePrevious" styleClass="transport-button"/>
-                <Button fx:id="stopButton" text="■" disable="true"
-                        onAction="#handleStop" styleClass="transport-button"/>
-                <Button fx:id="playButton" text="▶" disable="true"
-                        onAction="#handlePlay" styleClass="play-button"/>
-                <Button fx:id="pauseButton" text="Ⅱ" disable="true"
-                        onAction="#handlePause" styleClass="transport-button"/>
-                <Button fx:id="nextButton" text="▶|" disable="true"
-                        onAction="#handleNext" styleClass="transport-button"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Label fx:id="midiOutputStatusLabel" text="Saída MIDI desconectada" styleClass="muted-label"/>
+                <Separator orientation="VERTICAL"/>
+                <HBox alignment="CENTER" spacing="7" styleClass="chord-block">
+                    <Label text="ACORDE" styleClass="micro-label"/>
+                    <Label fx:id="chordValueLabel" text="—" styleClass="chord-value"/>
+                </HBox>
+                <Separator orientation="VERTICAL"/>
+                <Label fx:id="midiOutputStatusLabel" text="MIDI: desconectado"
+                       maxWidth="245" textOverrun="ELLIPSIS" styleClass="midi-output-label"/>
             </HBox>
         </VBox>
     </bottom>

@@ -4,6 +4,7 @@ import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -13,18 +14,19 @@ public final class SuperMidiaApplication extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
+        loadApplicationFonts();
         FXMLLoader loader = new FXMLLoader(
                 SuperMidiaApplication.class.getResource("main-view.fxml"));
         Parent root = loader.load();
         controller = loader.getController();
 
-        Scene scene = new Scene(root, 1280, 800);
+        Scene scene = new Scene(root, 1366, 768);
         scene.getStylesheets().add(
                 SuperMidiaApplication.class.getResource("theme.css").toExternalForm());
 
-        stage.setTitle("SuperMidia Live");
-        stage.setMinWidth(1060);
-        stage.setMinHeight(680);
+        stage.setTitle("SuperMídia MIDI Player");
+        stage.setMinWidth(1180);
+        stage.setMinHeight(700);
         stage.setScene(scene);
         stage.setOnCloseRequest(event -> {
             if (!controller.confirmClose()) {
@@ -33,6 +35,13 @@ public final class SuperMidiaApplication extends Application {
         });
         stage.centerOnScreen();
         stage.show();
+    }
+
+    private void loadApplicationFonts() {
+        Font.loadFont(SuperMidiaApplication.class
+                .getResource("fonts/SourceSans3-Regular.ttf").toExternalForm(), 14);
+        Font.loadFont(SuperMidiaApplication.class
+                .getResource("fonts/SourceSans3-Bold.ttf").toExternalForm(), 14);
     }
 
     @Override
