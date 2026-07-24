@@ -703,7 +703,10 @@ public final class MainController {
         Slider volumeSlider = new Slider(0, 127, 100);
         volumeSlider.setOrientation(Orientation.VERTICAL);
         volumeSlider.setBlockIncrement(1);
-        volumeSlider.setMajorTickUnit(16);
+        volumeSlider.setMajorTickUnit(127.0 / 4.0);
+        volumeSlider.setMinorTickCount(1);
+        volumeSlider.setShowTickMarks(true);
+        volumeSlider.setShowTickLabels(false);
         volumeSlider.setPrefHeight(150);
         volumeSlider.setMaxHeight(170);
         channelVolumeSliders[channel] = volumeSlider;

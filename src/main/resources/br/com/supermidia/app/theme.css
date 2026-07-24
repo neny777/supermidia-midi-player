@@ -651,6 +651,20 @@
     -fx-pref-width: 5px;
 }
 
+.mixer-channel-strip .slider .axis {
+    -fx-tick-length: 7px;
+}
+
+.mixer-channel-strip .slider .axis-tick-mark {
+    -fx-stroke: #526074;
+    -fx-stroke-width: 1.2px;
+}
+
+.mixer-channel-strip .slider .axis-minor-tick-mark {
+    -fx-stroke: #354254;
+    -fx-stroke-width: 1px;
+}
+
 .mixer-channel-strip .slider .thumb {
     -fx-pref-width: 13px;
     -fx-pref-height: 13px;
