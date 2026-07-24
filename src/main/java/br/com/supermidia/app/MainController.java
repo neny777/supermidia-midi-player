@@ -288,7 +288,7 @@ public final class MainController {
         about.setTitle("Sobre o SuperMídia MIDI Player");
         about.setHeaderText("SuperMídia MIDI Player · versão 0.1.0");
         about.setContentText("Player MIDI desenvolvido para apresentações ao vivo.\n\n"
-                + "Site: https://www.supermidiaalfenas.com.br\n"
+                + "Desenvolvedor: Denis Antonio Rocha\n"
                 + "Projeto: https://github.com/neny777/supermidia-midi-player\n\n"
                 + "Tipografia Source Sans 3 · licença OFL 1.1");
         about.initOwner(currentSongLabel.getScene().getWindow());
