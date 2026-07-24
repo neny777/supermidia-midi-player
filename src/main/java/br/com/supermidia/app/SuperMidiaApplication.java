@@ -4,6 +4,7 @@ import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
@@ -24,6 +25,10 @@ public final class SuperMidiaApplication extends Application {
         scene.getStylesheets().add(
                 SuperMidiaApplication.class.getResource("theme.css").toExternalForm());
 
+        var iconUrl = SuperMidiaApplication.class.getResource("supermidia-logo.png");
+        if (iconUrl != null) {
+            stage.getIcons().add(new Image(iconUrl.toExternalForm()));
+        }
         stage.setTitle("SuperMídia MIDI Player");
         stage.setMinWidth(1180);
         stage.setMinHeight(700);
