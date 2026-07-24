@@ -199,15 +199,17 @@
     -fx-min-height: 296px;
     -fx-pref-height: 310px;
     -fx-max-height: 320px;
+    -fx-background-color: #0f1722;
+    -fx-background-radius: 9;
+    -fx-padding: 6 5 5 5;
 }
 
 .mixer-bank {
     -fx-min-height: 296px;
     -fx-pref-height: 306px;
     -fx-max-height: 316px;
-    -fx-background-color: #0f1722;
-    -fx-background-radius: 9;
-    -fx-padding: 6 5 5 5;
+    -fx-background-color: transparent;
+    -fx-padding: 0;
 }
 
 .mixer-bank-active {

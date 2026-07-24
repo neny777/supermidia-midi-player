@@ -153,15 +153,15 @@
                     </StackPane>
                 </VBox>
 
-                <HBox spacing="8" styleClass="mixer-banks">
-                    <VBox alignment="TOP_CENTER" spacing="4" HBox.hgrow="ALWAYS"
+                <HBox spacing="4" styleClass="mixer-banks">
+                    <VBox alignment="TOP_RIGHT" spacing="4" HBox.hgrow="ALWAYS"
                           styleClass="mixer-bank, mixer-bank-active">
-                        <HBox fx:id="mixerBankOneContainer" alignment="TOP_CENTER" spacing="4"
+                        <HBox fx:id="mixerBankOneContainer" alignment="TOP_RIGHT" spacing="4"
                               fillHeight="false" maxWidth="Infinity"/>
                     </VBox>
-                    <VBox alignment="TOP_CENTER" spacing="4" HBox.hgrow="ALWAYS"
+                    <VBox alignment="TOP_LEFT" spacing="4" HBox.hgrow="ALWAYS"
                           styleClass="mixer-bank, mixer-bank-inactive">
-                        <HBox fx:id="mixerBankTwoContainer" alignment="TOP_CENTER" spacing="4"
+                        <HBox fx:id="mixerBankTwoContainer" alignment="TOP_LEFT" spacing="4"
                               fillHeight="false" maxWidth="Infinity"/>
                     </VBox>
                 </HBox>
