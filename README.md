@@ -117,6 +117,28 @@ O player já permite:
 - montar, salvar e reordenar playlists `.m3u8`;
 - avançar manual ou automaticamente na playlist;
 - extrair e acompanhar letras incorporadas no MIDI ou KAR;
-- analisar e exibir os 16 canais e instrumentos GM.
+- analisar e exibir os 16 canais e instrumentos GM;
+- associar qualquer botão, fader ou encoder a uma função por MIDI Learn;
+- mapear a controladora inteira de uma vez pelo assistente de mapeamento;
+- diagnosticar o que a controladora envia e salvar o relatório em arquivo;
+- exportar e importar o mapeamento como perfil `.smprofile`.
 
-A saída de letras para um segundo monitor, os perfis de mixagem por música e o mapeamento da SMC-Mixer permanecem nas próximas etapas.
+## Controladora MIDI
+
+O player aceita qualquer controladora. Em Configurações há três caminhos, do mais rápido ao mais controlado:
+
+1. **Assistente de mapeamento** — percorre as funções escolhidas e aprende o controle que
+   você mover em cada passo. É o caminho recomendado para uma controladora com mapa de fábrica.
+2. **Layout da SMC-Mixer** — programe a controladora com a tabela mostrada em
+   *Ver tabela do layout* e aplique o perfil correspondente. Vale para qualquer unidade,
+   em qualquer computador, sem precisar aprender controle por controle.
+3. **MIDI Learn avulso** — ajusta uma função específica sem refazer o restante.
+
+O diagnóstico registra tudo o que chega e classifica cada controle como contínuo absoluto,
+contínuo relativo ou gatilho. Use-o para descobrir se um botão como o Shift envia mensagem
+própria ou apenas altera as mensagens dos demais controles.
+
+No Windows, ligue a controladora pelo cabo USB-C: o Java Sound não enxerga MIDI por
+Bluetooth sem uma porta virtual intermediária.
+
+A saída de letras para um segundo monitor e os perfis de mixagem por música permanecem nas próximas etapas.

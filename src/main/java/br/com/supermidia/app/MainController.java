@@ -3,8 +3,17 @@ package br.com.supermidia.app;
 import br.com.supermidia.core.PlaybackMode;
 import br.com.supermidia.lyrics.LyricLine;
 import br.com.supermidia.lyrics.MidiLyrics;
+import br.com.supermidia.midi.ControllerProfile;
+import br.com.supermidia.midi.MidiBinding;
+import br.com.supermidia.midi.MidiControlMessage;
+import br.com.supermidia.midi.MidiInputDevice;
+import br.com.supermidia.midi.MidiInputDiagnostics;
+import br.com.supermidia.midi.MidiInputMonitor;
+import br.com.supermidia.midi.MidiLearnAction;
+import br.com.supermidia.midi.MidiMappingSession;
 import br.com.supermidia.midi.MidiOutputDevice;
 import br.com.supermidia.midi.MidiPlaybackEngine;
+import br.com.supermidia.midi.SmcMixerLayout;
 import br.com.supermidia.mixer.MidiChannelInfo;
 import br.com.supermidia.mixer.MidiSongAnalysis;
 import br.com.supermidia.playlist.PlaylistFileService;
@@ -28,6 +37,7 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.Slider;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
@@ -43,19 +53,66 @@ import javafx.util.Duration;
 
 import javax.sound.midi.InvalidMidiDataException;
 import javax.sound.midi.MidiUnavailableException;
+import javax.sound.midi.ShortMessage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.IntFunction;
 import java.util.prefs.Preferences;
 
 public final class MainController {
+    /** Recorte de funções que o assistente de mapeamento percorre em uma sessão. */
+    public enum MappingScope {
+        ALL("Tudo · transporte, gerais e mixer"),
+        TRANSPORT_AND_GLOBAL("Só transporte e controles gerais"),
+        MIXER("Só o mixer · faders, mute, solo e banco");
+
+        private final String label;
+
+        MappingScope(String label) {
+            this.label = label;
+        }
+
+        private boolean matches(MidiLearnAction action) {
+            boolean mixerAction = switch (action.kind()) {
+                case BANK_PREVIOUS, BANK_NEXT, BANK_TOGGLE,
+                     BANK_VOLUME, BANK_MUTE, BANK_SOLO -> true;
+                default -> false;
+            };
+            return switch (this) {
+                case ALL -> true;
+                case MIXER -> mixerAction;
+                case TRANSPORT_AND_GLOBAL -> !mixerAction;
+            };
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
     private static final int MIDI_CHANNEL_COUNT = 16;
     private static final int MIXER_BANK_SIZE = 8;
     private static final Duration LYRIC_SCROLL_DURATION = Duration.millis(260);
     private static final String AUTOPLAY_PREFERENCE_KEY = "autoplayEnabled";
+    private static final String MIDI_INPUT_PREFERENCE_KEY = "midiInputDevice";
+    private static final String MIDI_OUTPUT_PREFERENCE_KEY = "midiOutputDevice";
+    private static final String MIDI_BINDING_PREFERENCE_PREFIX = "midiBinding.";
+    private static final long MIDI_INPUT_ACTIVITY_TIMEOUT_NANOS = 350_000_000L;
+    private static final long MIDI_LEARN_RELEASE_TIMEOUT_NANOS = 400_000_000L;
+    private static final long MAPPING_COOLDOWN_NANOS = 700_000_000L;
+    private static final double MIXER_PICKUP_THRESHOLD = 2.5 / 127.0;
     @FXML
     private Label currentSongLabel;
     @FXML
@@ -79,6 +136,22 @@ public final class MainController {
     @FXML
     private Label midiOutputStatusLabel;
     @FXML
+    private Label midiInputConnectionDot;
+    @FXML
+    private Label midiInputStatusLabel;
+    @FXML
+    private Label midiInputMonitorLabel;
+    @FXML
+    private Label midiLearnStatusLabel;
+    @FXML
+    private Label midiDiagnosticsSummaryLabel;
+    @FXML
+    private Label mappingWizardProgressLabel;
+    @FXML
+    private Label mappingWizardActionLabel;
+    @FXML
+    private Label controllerProfileLabel;
+    @FXML
     private Label playlistFileLabel;
     @FXML
     private Label playlistCountLabel;
@@ -87,6 +160,12 @@ public final class MainController {
 
     @FXML
     private ComboBox<MidiOutputDevice> midiOutputComboBox;
+    @FXML
+    private ComboBox<MidiInputDevice> midiInputComboBox;
+    @FXML
+    private ComboBox<MidiLearnAction> midiLearnActionComboBox;
+    @FXML
+    private ComboBox<MappingScope> mappingWizardScopeComboBox;
     @FXML
     private ListView<PlaylistItem> playlistListView;
 
@@ -134,6 +213,16 @@ public final class MainController {
     private Button moveDownButton;
     @FXML
     private Button removePlaylistButton;
+    @FXML
+    private Button midiLearnButton;
+    @FXML
+    private Button midiLearnClearButton;
+    @FXML
+    private Button mappingWizardStartButton;
+    @FXML
+    private Button mappingWizardSkipButton;
+    @FXML
+    private Button mappingWizardBackButton;
 
     @FXML
     private VBox presentationView;
@@ -149,10 +238,21 @@ public final class MainController {
     private HBox mixerBankOneContainer;
     @FXML
     private HBox mixerBankTwoContainer;
+    @FXML
+    private VBox mixerBankOnePanel;
+    @FXML
+    private VBox mixerBankTwoPanel;
 
     private final PlaylistManager playlist = new PlaylistManager();
     private final PlaylistFileService playlistFileService = new PlaylistFileService();
     private final Preferences preferences = Preferences.userNodeForPackage(MainController.class);
+    private final ConcurrentLinkedQueue<MidiControlMessage> pendingMidiInputMessages =
+            new ConcurrentLinkedQueue<>();
+    private final MidiInputMonitor midiInputMonitor =
+            new MidiInputMonitor(pendingMidiInputMessages::offer);
+    private final List<MidiLearnAction> midiLearnActions = MidiLearnAction.defaultActions();
+    private final Map<String, MidiBinding> midiBindings = new HashMap<>();
+    private final MidiInputDiagnostics midiDiagnostics = new MidiInputDiagnostics();
     private final VBox[] mixerChannelStrips = new VBox[MIDI_CHANNEL_COUNT];
     private final Slider[] channelVolumeSliders = new Slider[MIDI_CHANNEL_COUNT];
     private final Label[] channelVolumeLabels = new Label[MIDI_CHANNEL_COUNT];
@@ -172,6 +272,18 @@ public final class MainController {
     private boolean updatingMixerControls;
     private boolean playlistDirty;
     private boolean refreshingOutputs;
+    private boolean refreshingInputs;
+    private long lastMidiInputActivityNanos;
+    private MidiLearnAction learningMidiAction;
+    private MidiBinding recentlyLearnedContinuousBinding;
+    private long recentlyLearnedBindingReleaseNanos;
+    private MidiMappingSession mappingSession;
+    private MidiBinding mappingCooldownBinding;
+    private long mappingCooldownReleaseNanos;
+    private int activeMixerBank;
+    private final boolean[] mixerPickupArmed = new boolean[MIXER_BANK_SIZE];
+    private final boolean[] mixerControllerValueKnown = new boolean[MIXER_BANK_SIZE];
+    private final double[] mixerLastControllerValue = new double[MIXER_BANK_SIZE];
     private Stage pianoStage;
 
     @FXML
@@ -179,6 +291,7 @@ public final class MainController {
         configureControlListeners();
         configurePlaylistView();
         configureMixerView();
+        configureMidiLearn();
         configureLyricsViewport();
         setLyricLabels("", "", "");
         playbackMode = loadPlaybackModePreference();
@@ -192,18 +305,20 @@ public final class MainController {
             engine.setMasterVolume(masterVolumeSlider.getValue() / 100.0);
             engine.setPlaybackFinishedHandler(
                     () -> Platform.runLater(this::handlePlaybackFinished));
-            startProgressUpdates();
             refreshMidiOutputs();
         } catch (MidiUnavailableException exception) {
             statusLabel.setText("MIDI INDISPONÍVEL");
             midiOutputStatusLabel.setText("Sequenciador MIDI não encontrado");
             disableMidiControls();
         }
+        startProgressUpdates();
+        refreshMidiInputs();
         updateTransportControls();
     }
 
     public void shutdown() {
         stopLyricScrollAnimation();
+        midiInputMonitor.close();
         if (progressTimeline != null) {
             progressTimeline.stop();
         }
@@ -452,6 +567,86 @@ public final class MainController {
     }
 
     @FXML
+    private void handleRefreshMidiInputs() {
+        refreshMidiInputs();
+    }
+
+    @FXML
+    private void handleMidiInputSelection() {
+        if (refreshingInputs) {
+            return;
+        }
+
+        MidiInputDevice selection = midiInputComboBox.getSelectionModel().getSelectedItem();
+        if (selection == null) {
+            selection = MidiInputDevice.none();
+        }
+
+        try {
+            midiInputMonitor.selectInput(selection);
+            pendingMidiInputMessages.clear();
+            if (selection.isNone()) {
+                removePreference(MIDI_INPUT_PREFERENCE_KEY);
+                midiInputStatusLabel.setText("Entrada: nenhuma");
+                midiInputStatusLabel.setTooltip(null);
+                midiInputMonitorLabel.setText("Nenhum dispositivo de entrada selecionado.");
+                setMidiInputConnected(false);
+            } else {
+                savePreference(MIDI_INPUT_PREFERENCE_KEY, selection.name());
+                midiInputStatusLabel.setText("Entrada: " + selection.name());
+                midiInputStatusLabel.setTooltip(new Tooltip("Entrada MIDI: " + selection.name()));
+                midiInputMonitorLabel.setText("Conectada. Aguardando mensagens MIDI.");
+                setMidiInputConnected(true);
+            }
+        } catch (MidiUnavailableException exception) {
+            selectNoMidiInput();
+            removePreference(MIDI_INPUT_PREFERENCE_KEY);
+            midiInputStatusLabel.setText("Entrada: falha de conexão");
+            midiInputStatusLabel.setTooltip(null);
+            midiInputMonitorLabel.setText("Não foi possível abrir o dispositivo de entrada.");
+            setMidiInputConnected(false);
+            showError("Entrada MIDI indisponível",
+                    "O dispositivo pode estar sendo usado por outro programa.", exception);
+        }
+    }
+
+    @FXML
+    private void handleStartMidiLearn() {
+        if (learningMidiAction != null) {
+            learningMidiAction = null;
+            midiLearnButton.setText("Aprender");
+            refreshMidiLearnStatus();
+            return;
+        }
+        if (!midiInputMonitor.hasInput()) {
+            midiLearnStatusLabel.setText("Selecione e conecte uma entrada MIDI primeiro.");
+            return;
+        }
+
+        MidiLearnAction action = midiLearnActionComboBox.getValue();
+        if (action == null) {
+            return;
+        }
+        learningMidiAction = action;
+        midiLearnButton.setText("Cancelar");
+        midiLearnStatusLabel.setText("Aguardando: mova ou pressione o controle desejado.");
+    }
+
+    @FXML
+    private void handleClearMidiLearnBinding() {
+        MidiLearnAction action = midiLearnActionComboBox.getValue();
+        if (action == null) {
+            return;
+        }
+        learningMidiAction = null;
+        midiLearnButton.setText("Aprender");
+        midiBindings.remove(action.id());
+        removePreference(MIDI_BINDING_PREFERENCE_PREFIX + action.id());
+        refreshMidiLearnStatus();
+        refreshControllerProfileLabel();
+    }
+
+    @FXML
     private void handleMidiOutputSelection() {
         if (engine == null || refreshingOutputs) {
             return;
@@ -459,12 +654,17 @@ public final class MainController {
         MidiOutputDevice selection = midiOutputComboBox.getSelectionModel().getSelectedItem();
         try {
             engine.selectOutput(selection);
-            String outputName = selection == null ? "desconectado" : selection.name();
-            midiOutputStatusLabel.setText("MIDI: " + outputName);
+            String outputName = selection == null ? "desconectada" : selection.name();
+            midiOutputStatusLabel.setText("Saída: " + outputName);
             midiOutputStatusLabel.setTooltip(new Tooltip("Saída MIDI: " + outputName));
+            if (selection == null) {
+                removePreference(MIDI_OUTPUT_PREFERENCE_KEY);
+            } else {
+                savePreference(MIDI_OUTPUT_PREFERENCE_KEY, selection.name());
+            }
             updateTransportControls();
         } catch (MidiUnavailableException exception) {
-            midiOutputStatusLabel.setText("MIDI: falha de conexão");
+            midiOutputStatusLabel.setText("Saída: falha de conexão");
             midiOutputStatusLabel.setTooltip(null);
             refreshingOutputs = true;
             midiOutputComboBox.getSelectionModel().clearSelection();
@@ -496,6 +696,30 @@ public final class MainController {
         try {
             preferences.putBoolean(
                     AUTOPLAY_PREFERENCE_KEY, playbackMode == PlaybackMode.AUTOMATIC);
+        } catch (SecurityException ignored) {
+            // A preferência é opcional; o player continua funcionando sem persistência.
+        }
+    }
+
+    private String loadPreference(String key) {
+        try {
+            return preferences.get(key, null);
+        } catch (SecurityException exception) {
+            return null;
+        }
+    }
+
+    private void savePreference(String key, String value) {
+        try {
+            preferences.put(key, value);
+        } catch (SecurityException ignored) {
+            // A preferência é opcional; o player continua funcionando sem persistência.
+        }
+    }
+
+    private void removePreference(String key) {
+        try {
+            preferences.remove(key);
         } catch (SecurityException ignored) {
             // A preferência é opcional; o player continua funcionando sem persistência.
         }
@@ -650,6 +874,380 @@ public final class MainController {
 
     private int roundedSliderValue(double value, int step) {
         return (int) Math.round(value / step) * step;
+    }
+
+    private void configureMidiLearn() {
+        for (MidiLearnAction action : midiLearnActions) {
+            MidiBinding.decode(loadPreference(MIDI_BINDING_PREFERENCE_PREFIX + action.id()))
+                    .ifPresent(binding -> midiBindings.put(action.id(), binding));
+        }
+        midiLearnActionComboBox.setItems(FXCollections.observableArrayList(midiLearnActions));
+        midiLearnActionComboBox.getSelectionModel().selectFirst();
+        midiLearnActionComboBox.valueProperty().addListener((ignored, oldValue, newValue) -> {
+            if (learningMidiAction != null) {
+                learningMidiAction = null;
+                midiLearnButton.setText("Aprender");
+            }
+            refreshMidiLearnStatus();
+        });
+        mappingWizardScopeComboBox.setItems(
+                FXCollections.observableArrayList(MappingScope.values()));
+        mappingWizardScopeComboBox.getSelectionModel().select(MappingScope.ALL);
+        refreshMidiLearnStatus();
+        refreshMappingWizard();
+        refreshDiagnosticsSummary();
+        refreshControllerProfileLabel();
+        updateActiveMixerBankStyles();
+    }
+
+    // ----------------------------------------------------------------------
+    // Assistente de mapeamento
+    // ----------------------------------------------------------------------
+
+    @FXML
+    private void handleStartMappingWizard() {
+        if (mappingSession != null) {
+            cancelMappingWizard();
+            return;
+        }
+        if (!midiInputMonitor.hasInput()) {
+            mappingWizardActionLabel.setText("Selecione e conecte uma entrada MIDI primeiro.");
+            return;
+        }
+
+        MappingScope scope = mappingWizardScopeComboBox.getValue();
+        if (scope == null) {
+            scope = MappingScope.ALL;
+        }
+        List<MidiLearnAction> selectedActions = new ArrayList<>();
+        for (MidiLearnAction action : midiLearnActions) {
+            if (scope.matches(action)) {
+                selectedActions.add(action);
+            }
+        }
+        if (selectedActions.isEmpty()) {
+            return;
+        }
+
+        learningMidiAction = null;
+        midiLearnButton.setText("Aprender");
+        mappingSession = new MidiMappingSession(selectedActions);
+        mappingCooldownBinding = null;
+        pendingMidiInputMessages.clear();
+        refreshMappingWizard();
+    }
+
+    @FXML
+    private void handleSkipMappingStep() {
+        if (mappingSession == null) {
+            return;
+        }
+        mappingSession.skip();
+        mappingCooldownBinding = null;
+        if (mappingSession.isFinished()) {
+            finishMappingWizard();
+        } else {
+            refreshMappingWizard();
+        }
+    }
+
+    @FXML
+    private void handleBackMappingStep() {
+        if (mappingSession == null) {
+            return;
+        }
+        mappingSession.back();
+        mappingCooldownBinding = null;
+        refreshMappingWizard();
+    }
+
+    private void advanceMappingWizard(MidiControlMessage message) {
+        long now = System.nanoTime();
+        if (mappingCooldownBinding != null) {
+            if (mappingCooldownBinding.matches(message)) {
+                mappingCooldownReleaseNanos = now + MAPPING_COOLDOWN_NANOS;
+                return;
+            }
+            if (now >= mappingCooldownReleaseNanos) {
+                mappingCooldownBinding = null;
+            }
+        }
+
+        Optional<MidiBinding> learned = mappingSession.submit(message);
+        if (learned.isEmpty()) {
+            return;
+        }
+        mappingCooldownBinding = learned.get();
+        mappingCooldownReleaseNanos = now + MAPPING_COOLDOWN_NANOS;
+
+        if (mappingSession.isFinished()) {
+            finishMappingWizard();
+        } else {
+            refreshMappingWizard();
+        }
+    }
+
+    private void finishMappingWizard() {
+        Map<String, MidiBinding> learned = mappingSession.result();
+        int mapped = learned.size();
+        int total = mappingSession.total();
+        mappingSession = null;
+        mappingCooldownBinding = null;
+
+        learned.forEach(this::assignMidiBinding);
+        armMixerPickup();
+        refreshMappingWizard();
+        refreshMidiLearnStatus();
+        refreshControllerProfileLabel();
+        mappingWizardActionLabel.setText("Assistente concluído: " + mapped
+                + " de " + total + (total == 1 ? " função mapeada." : " funções mapeadas."));
+    }
+
+    private void cancelMappingWizard() {
+        mappingSession = null;
+        mappingCooldownBinding = null;
+        refreshMappingWizard();
+        mappingWizardActionLabel.setText("Assistente cancelado. Nada foi alterado.");
+    }
+
+    private void refreshMappingWizard() {
+        boolean running = mappingSession != null;
+        mappingWizardStartButton.setText(running ? "Cancelar" : "Iniciar assistente");
+        mappingWizardSkipButton.setDisable(!running);
+        mappingWizardBackButton.setDisable(!running || mappingSession.isAtFirstAction());
+        mappingWizardScopeComboBox.setDisable(running);
+        midiLearnButton.setDisable(running);
+        midiLearnActionComboBox.setDisable(running);
+
+        if (!running) {
+            mappingWizardProgressLabel.setText("");
+            mappingWizardActionLabel.setText(
+                    "O assistente percorre cada função e aprende o controle que você mover.");
+            return;
+        }
+
+        MidiLearnAction action = mappingSession.current().orElse(null);
+        mappingWizardProgressLabel.setText("Passo " + mappingSession.position()
+                + " de " + mappingSession.total() + " · " + mappingSession.mappedCount()
+                + " mapeadas");
+        if (action == null) {
+            mappingWizardActionLabel.setText("");
+            return;
+        }
+        String instruction = action.kind().isContinuous()
+                ? "Mova de ponta a ponta o controle para: "
+                : "Pressione o botão para: ";
+        mappingWizardActionLabel.setText(instruction + action.displayName());
+    }
+
+    private void assignMidiBinding(String actionId, MidiBinding binding) {
+        midiBindings.entrySet().removeIf(entry -> {
+            if (!entry.getKey().equals(actionId) && entry.getValue().equals(binding)) {
+                removePreference(MIDI_BINDING_PREFERENCE_PREFIX + entry.getKey());
+                return true;
+            }
+            return false;
+        });
+        midiBindings.put(actionId, binding);
+        savePreference(MIDI_BINDING_PREFERENCE_PREFIX + actionId, binding.encode());
+    }
+
+    // ----------------------------------------------------------------------
+    // Diagnóstico da controladora
+    // ----------------------------------------------------------------------
+
+    @FXML
+    private void handleShowMidiDiagnostics() {
+        showTextDialog("Diagnóstico da controladora",
+                midiDiagnostics.summary(),
+                midiDiagnostics.report(currentMidiInputName()));
+    }
+
+    @FXML
+    private void handleClearMidiDiagnostics() {
+        midiDiagnostics.clear();
+        refreshDiagnosticsSummary();
+    }
+
+    @FXML
+    private void handleSaveMidiDiagnosticsReport() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Salvar diagnóstico da controladora");
+        chooser.setInitialFileName("diagnostico-controladora.txt");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Arquivo de texto", "*.txt"));
+        File target = chooser.showSaveDialog(settingsWindow());
+        if (target == null) {
+            return;
+        }
+        try {
+            Files.writeString(target.toPath(),
+                    midiDiagnostics.report(currentMidiInputName()), StandardCharsets.UTF_8);
+            midiDiagnosticsSummaryLabel.setText(
+                    midiDiagnostics.summary() + " · salvo em " + target.getName());
+        } catch (IOException exception) {
+            showError("Não foi possível salvar o diagnóstico",
+                    "Escolha outra pasta e tente novamente.", exception);
+        }
+    }
+
+    private void refreshDiagnosticsSummary() {
+        midiDiagnosticsSummaryLabel.setText(midiDiagnostics.summary());
+    }
+
+    private String currentMidiInputName() {
+        MidiInputDevice input = midiInputComboBox.getValue();
+        return input == null || input.isNone() ? "" : input.name();
+    }
+
+    // ----------------------------------------------------------------------
+    // Perfis de controladora
+    // ----------------------------------------------------------------------
+
+    @FXML
+    private void handleExportControllerProfile() {
+        if (midiBindings.isEmpty()) {
+            controllerProfileLabel.setText("Não há vínculos configurados para exportar.");
+            return;
+        }
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Exportar perfil da controladora");
+        chooser.setInitialFileName("controladora" + ControllerProfile.FILE_EXTENSION);
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                "Perfil de controladora", "*" + ControllerProfile.FILE_EXTENSION));
+        File target = chooser.showSaveDialog(settingsWindow());
+        if (target == null) {
+            return;
+        }
+
+        Map<String, MidiBinding> ordered = new LinkedHashMap<>();
+        for (MidiLearnAction action : midiLearnActions) {
+            MidiBinding binding = midiBindings.get(action.id());
+            if (binding != null) {
+                ordered.put(action.id(), binding);
+            }
+        }
+
+        String profileName = currentMidiInputName();
+        try {
+            ControllerProfile profile = new ControllerProfile(
+                    profileName.isBlank() ? "Controladora" : profileName, ordered);
+            profile.save(target.toPath());
+            controllerProfileLabel.setText(
+                    "Perfil exportado com " + profile.size() + " vínculos.");
+        } catch (IOException exception) {
+            showError("Não foi possível exportar o perfil",
+                    "Escolha outra pasta e tente novamente.", exception);
+        }
+    }
+
+    @FXML
+    private void handleImportControllerProfile() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Importar perfil da controladora");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                "Perfil de controladora", "*" + ControllerProfile.FILE_EXTENSION));
+        File source = chooser.showOpenDialog(settingsWindow());
+        if (source == null) {
+            return;
+        }
+
+        try {
+            Optional<ControllerProfile> profile = ControllerProfile.load(source.toPath());
+            if (profile.isEmpty()) {
+                controllerProfileLabel.setText("O arquivo não contém vínculos válidos.");
+                return;
+            }
+            applyControllerProfile(profile.get());
+        } catch (IOException exception) {
+            showError("Não foi possível importar o perfil",
+                    "Confira se o arquivo existe e pode ser lido.", exception);
+        }
+    }
+
+    @FXML
+    private void handleApplySmcMixerLayout() {
+        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
+                "Isso substitui todos os vínculos atuais pelo layout de referência da "
+                        + "SMC-Mixer. A controladora precisa estar programada com a tabela "
+                        + "correspondente. Deseja continuar?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirmation.setTitle("SuperMídia MIDI Player");
+        confirmation.setHeaderText("Aplicar layout da SMC-Mixer");
+        confirmation.initOwner(settingsWindow());
+        if (confirmation.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+        applyControllerProfile(SmcMixerLayout.profile());
+    }
+
+    @FXML
+    private void handleShowSmcMixerTable() {
+        showTextDialog("Layout de referência da SMC-Mixer",
+                "Programe estes valores no editor da controladora.",
+                SmcMixerLayout.setupTable());
+    }
+
+    private void applyControllerProfile(ControllerProfile profile) {
+        for (MidiLearnAction action : midiLearnActions) {
+            midiBindings.remove(action.id());
+            removePreference(MIDI_BINDING_PREFERENCE_PREFIX + action.id());
+        }
+        profile.bindings().forEach((actionId, binding) -> {
+            midiBindings.put(actionId, binding);
+            savePreference(MIDI_BINDING_PREFERENCE_PREFIX + actionId, binding.encode());
+        });
+        armMixerPickup();
+        refreshMidiLearnStatus();
+        controllerProfileLabel.setText("Perfil aplicado: " + profile.name()
+                + " · " + profile.size() + " de " + midiLearnActions.size()
+                + " funções com controle atribuído.");
+    }
+
+    private void refreshControllerProfileLabel() {
+        int configured = 0;
+        for (MidiLearnAction action : midiLearnActions) {
+            if (midiBindings.containsKey(action.id())) {
+                configured++;
+            }
+        }
+        controllerProfileLabel.setText(configured + " de " + midiLearnActions.size()
+                + " funções com controle atribuído.");
+    }
+
+    private javafx.stage.Window settingsWindow() {
+        return currentSongLabel.getScene() == null
+                ? null : currentSongLabel.getScene().getWindow();
+    }
+
+    private void showTextDialog(String title, String header, String content) {
+        TextArea textArea = new TextArea(content);
+        textArea.setEditable(false);
+        textArea.setWrapText(false);
+        textArea.setPrefColumnCount(72);
+        textArea.setPrefRowCount(24);
+        textArea.setStyle("-fx-font-family: 'Consolas', 'DejaVu Sans Mono', monospace;");
+
+        Alert dialog = new Alert(Alert.AlertType.INFORMATION);
+        dialog.setTitle("SuperMídia MIDI Player");
+        dialog.setHeaderText(title + (header == null || header.isBlank() ? "" : "\n" + header));
+        dialog.getDialogPane().setContent(textArea);
+        dialog.setResizable(true);
+        dialog.initOwner(settingsWindow());
+        dialog.showAndWait();
+    }
+
+    private void refreshMidiLearnStatus() {
+        MidiLearnAction action = midiLearnActionComboBox.getValue();
+        MidiBinding binding = action == null ? null : midiBindings.get(action.id());
+        if (binding == null) {
+            midiLearnStatusLabel.setText("Ainda não configurado.");
+            midiLearnClearButton.setDisable(true);
+        } else {
+            midiLearnStatusLabel.setText("Configurado: " + binding.description());
+            midiLearnClearButton.setDisable(false);
+        }
     }
 
     private void configurePlaylistView() {
@@ -809,6 +1407,7 @@ public final class MainController {
         } finally {
             updatingMixerControls = false;
         }
+        armMixerPickup();
     }
 
     private String abbreviatedInstrument(MidiChannelInfo info, int channel) {
@@ -872,17 +1471,54 @@ public final class MainController {
         refreshingOutputs = true;
         try {
             String previousName = midiOutputComboBox.getValue() == null
-                    ? null : midiOutputComboBox.getValue().name();
+                    ? loadPreference(MIDI_OUTPUT_PREFERENCE_KEY)
+                    : midiOutputComboBox.getValue().name();
             List<MidiOutputDevice> outputs = engine.listOutputDevices();
             midiOutputComboBox.setItems(FXCollections.observableArrayList(outputs));
             midiOutputComboBox.getSelectionModel().select(findPreferredOutput(outputs, previousName));
             if (outputs.isEmpty()) {
-                midiOutputStatusLabel.setText("Nenhuma saída MIDI encontrada");
+                midiOutputStatusLabel.setText("Saída: nenhuma encontrada");
             }
         } finally {
             refreshingOutputs = false;
         }
         handleMidiOutputSelection();
+    }
+
+    private void refreshMidiInputs() {
+        MidiInputDevice currentInput = midiInputComboBox.getValue();
+        String preferredName = currentInput == null || currentInput.isNone()
+                ? loadPreference(MIDI_INPUT_PREFERENCE_KEY)
+                : currentInput.name();
+        List<MidiInputDevice> detectedInputs = midiInputMonitor.listInputDevices();
+        List<MidiInputDevice> choices = new ArrayList<>(detectedInputs.size() + 1);
+        choices.add(MidiInputDevice.none());
+        choices.addAll(detectedInputs);
+
+        MidiInputDevice preferredInput = findPreferredInput(detectedInputs, preferredName);
+        refreshingInputs = true;
+        try {
+            midiInputComboBox.setItems(FXCollections.observableArrayList(choices));
+            midiInputComboBox.getSelectionModel().select(preferredInput);
+        } finally {
+            refreshingInputs = false;
+        }
+
+        handleMidiInputSelection();
+        if (preferredName != null && preferredInput.isNone()) {
+            midiInputMonitorLabel.setText("A entrada usada anteriormente não foi encontrada.");
+        }
+    }
+
+    private MidiInputDevice findPreferredInput(List<MidiInputDevice> inputs, String preferredName) {
+        if (preferredName != null) {
+            for (MidiInputDevice input : inputs) {
+                if (input.name().equals(preferredName)) {
+                    return input;
+                }
+            }
+        }
+        return MidiInputDevice.none();
     }
 
     private MidiOutputDevice findPreferredOutput(List<MidiOutputDevice> outputs, String previousName) {
@@ -902,6 +1538,30 @@ public final class MainController {
         return outputs.isEmpty() ? null : outputs.getFirst();
     }
 
+    private void selectNoMidiInput() {
+        try {
+            midiInputMonitor.selectInput(MidiInputDevice.none());
+        } catch (MidiUnavailableException ignored) {
+            // Desconectar a entrada não abre nenhum dispositivo e não deve falhar.
+        }
+        refreshingInputs = true;
+        try {
+            midiInputComboBox.getSelectionModel().select(MidiInputDevice.none());
+        } finally {
+            refreshingInputs = false;
+        }
+    }
+
+    private void setMidiInputConnected(boolean connected) {
+        List<String> styleClasses = midiInputConnectionDot.getStyleClass();
+        styleClasses.remove("connection-dot-active");
+        if (connected) {
+            styleClasses.remove("connection-dot-disconnected");
+        } else if (!styleClasses.contains("connection-dot-disconnected")) {
+            styleClasses.add("connection-dot-disconnected");
+        }
+    }
+
     private void startProgressUpdates() {
         progressTimeline = new Timeline(new KeyFrame(Duration.millis(150), ignored -> refreshProgress()));
         progressTimeline.setCycleCount(Timeline.INDEFINITE);
@@ -909,6 +1569,7 @@ public final class MainController {
     }
 
     private void refreshProgress() {
+        refreshMidiInputActivity();
         if (engine == null || !engine.hasSequence() || progressSlider.isValueChanging()) {
             return;
         }
@@ -917,6 +1578,245 @@ public final class MainController {
         currentTimeLabel.setText(formatTime(position));
         refreshLyricsAtTick(engine.getTickPosition());
         refreshMixerActivity();
+    }
+
+    private void refreshMidiInputActivity() {
+        MidiControlMessage message;
+        MidiControlMessage lastMessage = null;
+        while ((message = pendingMidiInputMessages.poll()) != null) {
+            lastMessage = message;
+            midiDiagnostics.observe(message);
+            if (mappingSession != null) {
+                advanceMappingWizard(message);
+            } else if (!tryCompleteMidiLearn(message)) {
+                executeMidiBindings(message);
+            }
+        }
+
+        if (lastMessage != null) {
+            midiInputMonitorLabel.setText(describeMidiInputMessage(lastMessage));
+            refreshDiagnosticsSummary();
+            if (!midiInputConnectionDot.getStyleClass().contains("connection-dot-active")) {
+                midiInputConnectionDot.getStyleClass().add("connection-dot-active");
+            }
+            lastMidiInputActivityNanos = System.nanoTime();
+        } else if (lastMidiInputActivityNanos > 0
+                && System.nanoTime() - lastMidiInputActivityNanos > MIDI_INPUT_ACTIVITY_TIMEOUT_NANOS) {
+            midiInputConnectionDot.getStyleClass().remove("connection-dot-active");
+        }
+    }
+
+    private boolean tryCompleteMidiLearn(MidiControlMessage message) {
+        if (learningMidiAction == null) {
+            return false;
+        }
+
+        Optional<MidiBinding> learned = MidiBinding.learn(
+                message, learningMidiAction.kind().isContinuous());
+        if (learned.isEmpty()) {
+            return true;
+        }
+
+        MidiLearnAction action = learningMidiAction;
+        MidiBinding binding = learned.get();
+        assignMidiBinding(action.id(), binding);
+        refreshControllerProfileLabel();
+        if (action.kind().isContinuous()) {
+            recentlyLearnedContinuousBinding = binding;
+            recentlyLearnedBindingReleaseNanos =
+                    System.nanoTime() + MIDI_LEARN_RELEASE_TIMEOUT_NANOS;
+            if (action.kind() == MidiLearnAction.Kind.BANK_VOLUME) {
+                mixerPickupArmed[action.slot()] = true;
+                mixerControllerValueKnown[action.slot()] = false;
+            }
+        }
+        learningMidiAction = null;
+        midiLearnButton.setText("Aprender");
+        midiLearnStatusLabel.setText("Aprendido: " + binding.description());
+        midiLearnClearButton.setDisable(false);
+        return true;
+    }
+
+    private void executeMidiBindings(MidiControlMessage message) {
+        long now = System.nanoTime();
+        if (recentlyLearnedContinuousBinding != null
+                && now >= recentlyLearnedBindingReleaseNanos) {
+            recentlyLearnedContinuousBinding = null;
+        }
+        if (recentlyLearnedContinuousBinding != null
+                && recentlyLearnedContinuousBinding.matches(message)) {
+            recentlyLearnedBindingReleaseNanos = now + MIDI_LEARN_RELEASE_TIMEOUT_NANOS;
+            return;
+        }
+
+        for (MidiLearnAction action : midiLearnActions) {
+            MidiBinding binding = midiBindings.get(action.id());
+            if (binding == null || !binding.matches(message)) {
+                continue;
+            }
+            if (action.kind().isContinuous()) {
+                executeContinuousMidiAction(action, binding, message);
+            } else if (binding.isTriggeredBy(message)) {
+                executeTriggeredMidiAction(action);
+            }
+        }
+    }
+
+    private void executeTriggeredMidiAction(MidiLearnAction action) {
+        switch (action.kind()) {
+            case PLAY -> {
+                if (!playButton.isDisable()) {
+                    handlePlay();
+                }
+            }
+            case PAUSE -> {
+                if (!pauseButton.isDisable()) {
+                    handlePause();
+                }
+            }
+            case STOP -> {
+                if (!stopButton.isDisable()) {
+                    handleStop();
+                }
+            }
+            case PREVIOUS -> {
+                if (!previousButton.isDisable()) {
+                    handlePrevious();
+                }
+            }
+            case NEXT -> {
+                if (!nextButton.isDisable()) {
+                    handleNext();
+                }
+            }
+            case PANIC -> {
+                if (!panicButton.isDisable()) {
+                    handlePanic();
+                }
+            }
+            case AUTOPLAY_TOGGLE -> automaticModeToggle.fire();
+            case BANK_PREVIOUS -> setActiveMixerBank(0);
+            case BANK_NEXT -> setActiveMixerBank(1);
+            case BANK_TOGGLE -> setActiveMixerBank(activeMixerBank == 0 ? 1 : 0);
+            case BANK_MUTE -> fireMixerToggle(channelMuteButtons, action.slot());
+            case BANK_SOLO -> fireMixerToggle(channelSoloButtons, action.slot());
+            default -> {
+                // Ações contínuas são tratadas separadamente.
+            }
+        }
+    }
+
+    private void executeContinuousMidiAction(MidiLearnAction action,
+                                             MidiBinding binding,
+                                             MidiControlMessage message) {
+        boolean relative = binding.valueMode() == MidiBinding.ValueMode.RELATIVE;
+        int delta = relative ? binding.relativeDelta(message) : 0;
+        double absolute = relative ? 0 : binding.absoluteValue(message);
+
+        switch (action.kind()) {
+            case TRANSPOSE -> applyMidiToSlider(transposeSlider, absolute, delta, relative, 1);
+            case SPEED -> applyMidiToSlider(speedSlider, absolute, delta, relative, 5);
+            case MASTER_VOLUME -> applyMidiToSlider(masterVolumeSlider, absolute, delta, relative, 5);
+            case BANK_VOLUME -> applyMidiToMixerFader(action.slot(), absolute, delta, relative);
+            default -> {
+                // Ações de disparo são tratadas separadamente.
+            }
+        }
+    }
+
+    private void applyMidiToSlider(Slider slider,
+                                   double absolute,
+                                   int delta,
+                                   boolean relative,
+                                   int step) {
+        double value = relative
+                ? slider.getValue() + delta * step
+                : slider.getMin() + absolute * (slider.getMax() - slider.getMin());
+        slider.setValue(roundedSliderValue(
+                Math.max(slider.getMin(), Math.min(slider.getMax(), value)), step));
+    }
+
+    private void applyMidiToMixerFader(int slot,
+                                       double absolute,
+                                       int delta,
+                                       boolean relative) {
+        int channel = activeMixerBank * MIXER_BANK_SIZE + slot;
+        Slider slider = channelVolumeSliders[channel];
+        if (slider.isDisable()) {
+            return;
+        }
+        if (relative) {
+            slider.setValue(Math.max(slider.getMin(),
+                    Math.min(slider.getMax(), slider.getValue() + delta)));
+            return;
+        }
+
+        double target = slider.getValue() / slider.getMax();
+        double previous = mixerLastControllerValue[slot];
+        mixerLastControllerValue[slot] = absolute;
+        if (mixerPickupArmed[slot]) {
+            boolean closeEnough = Math.abs(absolute - target) <= MIXER_PICKUP_THRESHOLD;
+            boolean crossedTarget = mixerControllerValueKnown[slot]
+                    && (previous - target) * (absolute - target) <= 0;
+            mixerControllerValueKnown[slot] = true;
+            if (!closeEnough && !crossedTarget) {
+                return;
+            }
+            mixerPickupArmed[slot] = false;
+        }
+        slider.setValue(Math.round(absolute * slider.getMax()));
+    }
+
+    private void fireMixerToggle(ToggleButton[] buttons, int slot) {
+        int channel = activeMixerBank * MIXER_BANK_SIZE + slot;
+        ToggleButton button = buttons[channel];
+        if (!button.isDisable()) {
+            button.fire();
+        }
+    }
+
+    private void setActiveMixerBank(int bank) {
+        if (bank < 0 || bank > 1 || activeMixerBank == bank) {
+            return;
+        }
+        activeMixerBank = bank;
+        armMixerPickup();
+        updateActiveMixerBankStyles();
+    }
+
+    private void armMixerPickup() {
+        for (int slot = 0; slot < MIXER_BANK_SIZE; slot++) {
+            mixerPickupArmed[slot] = true;
+            mixerControllerValueKnown[slot] = false;
+        }
+    }
+
+    private void updateActiveMixerBankStyles() {
+        setMixerBankStyle(mixerBankOnePanel, activeMixerBank == 0);
+        setMixerBankStyle(mixerBankTwoPanel, activeMixerBank == 1);
+    }
+
+    private void setMixerBankStyle(VBox panel, boolean active) {
+        panel.getStyleClass().removeAll("mixer-bank-active", "mixer-bank-inactive");
+        panel.getStyleClass().add(active ? "mixer-bank-active" : "mixer-bank-inactive");
+    }
+
+    private String describeMidiInputMessage(MidiControlMessage message) {
+        int channel = message.channel() + 1;
+        return switch (message.command()) {
+            case ShortMessage.CONTROL_CHANGE -> "Sinal recebido · CC " + message.data1()
+                    + " · valor " + message.data2() + " · canal " + channel;
+            case ShortMessage.PITCH_BEND -> "Sinal recebido · Pitch Bend · valor "
+                    + ((message.data2() << 7) | message.data1()) + " · canal " + channel;
+            case ShortMessage.NOTE_ON -> message.data2() == 0
+                    ? "Sinal recebido · Note Off " + message.data1() + " · canal " + channel
+                    : "Sinal recebido · Note On " + message.data1()
+                            + " · valor " + message.data2() + " · canal " + channel;
+            case ShortMessage.NOTE_OFF -> "Sinal recebido · Note Off " + message.data1()
+                    + " · canal " + channel;
+            default -> "Sinal MIDI recebido · comando " + message.command()
+                    + " · canal " + channel;
+        };
     }
 
     private void seekToSliderPosition() {

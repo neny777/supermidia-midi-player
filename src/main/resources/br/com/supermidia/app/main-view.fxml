@@ -8,6 +8,7 @@
 <?import javafx.scene.control.MenuButton?>
 <?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.ToggleGroup?>
 <?import javafx.scene.control.Tooltip?>
@@ -64,9 +65,12 @@
                        styleClass="next-song-name"/>
             </HBox>
 
-            <HBox alignment="CENTER" spacing="7" styleClass="controller-chip">
-                <Label text="●" styleClass="connection-dot-disconnected"/>
-                <Label text="Controladora: nenhuma" styleClass="controller-value"/>
+            <HBox alignment="CENTER" spacing="7" styleClass="midi-input-chip">
+                <Label fx:id="midiInputConnectionDot" text="●"
+                       styleClass="connection-dot, connection-dot-disconnected"/>
+                <Label fx:id="midiInputStatusLabel" text="Entrada: nenhuma"
+                       maxWidth="Infinity" textOverrun="ELLIPSIS"
+                       styleClass="midi-input-value"/>
             </HBox>
 
             <Button fx:id="panicButton" text="PANIC" disable="true"
@@ -154,12 +158,12 @@
                 </VBox>
 
                 <HBox spacing="4" styleClass="mixer-banks">
-                    <VBox alignment="TOP_RIGHT" spacing="4" HBox.hgrow="ALWAYS"
+                    <VBox fx:id="mixerBankOnePanel" alignment="TOP_RIGHT" spacing="4" HBox.hgrow="ALWAYS"
                           styleClass="mixer-bank, mixer-bank-active">
                         <HBox fx:id="mixerBankOneContainer" alignment="TOP_RIGHT" spacing="4"
                               fillHeight="false" maxWidth="Infinity"/>
                     </VBox>
-                    <VBox alignment="TOP_LEFT" spacing="4" HBox.hgrow="ALWAYS"
+                    <VBox fx:id="mixerBankTwoPanel" alignment="TOP_LEFT" spacing="4" HBox.hgrow="ALWAYS"
                           styleClass="mixer-bank, mixer-bank-inactive">
                         <HBox fx:id="mixerBankTwoContainer" alignment="TOP_LEFT" spacing="4"
                               fillHeight="false" maxWidth="Infinity"/>
@@ -212,6 +216,101 @@
                            styleClass="page-subtitle"/>
                 </VBox>
 
+                <ScrollPane fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS"
+                            styleClass="settings-scroll">
+                    <content>
+                        <VBox spacing="18">
+                <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Entrada MIDI" styleClass="settings-title"/>
+                    <Label text="Selecione uma controladora, teclado ou outro dispositivo que enviará comandos ao player."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <ComboBox fx:id="midiInputComboBox" promptText="Selecionar entrada MIDI"
+                                  onAction="#handleMidiInputSelection" styleClass="device-combo"
+                                  HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Button text="Atualizar" onAction="#handleRefreshMidiInputs"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="midiInputMonitorLabel"
+                           text="Nenhum dispositivo de entrada selecionado."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Controles MIDI" styleClass="settings-title"/>
+                    <Label text="Associe qualquer botão, fader ou encoder a uma função usando MIDI Learn."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <ComboBox fx:id="midiLearnActionComboBox" promptText="Selecionar função"
+                                  styleClass="device-combo" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Button fx:id="midiLearnButton" text="Aprender"
+                                onAction="#handleStartMidiLearn" styleClass="primary-button"/>
+                        <Button fx:id="midiLearnClearButton" text="Limpar" disable="true"
+                                onAction="#handleClearMidiLearnBinding" styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="midiLearnStatusLabel" text="Ainda não configurado."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Assistente de mapeamento" styleClass="settings-title"/>
+                    <Label text="Percorre as funções escolhidas uma a uma e aprende o controle que você mover, sem precisar repetir MIDI Learn para cada função."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <ComboBox fx:id="mappingWizardScopeComboBox" promptText="Selecionar alcance"
+                                  styleClass="device-combo" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Button fx:id="mappingWizardStartButton" text="Iniciar assistente"
+                                onAction="#handleStartMappingWizard" styleClass="primary-button"/>
+                        <Button fx:id="mappingWizardBackButton" text="Voltar" disable="true"
+                                onAction="#handleBackMappingStep" styleClass="secondary-button"/>
+                        <Button fx:id="mappingWizardSkipButton" text="Pular" disable="true"
+                                onAction="#handleSkipMappingStep" styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="mappingWizardProgressLabel" text=""
+                           wrapText="true" styleClass="muted-label"/>
+                    <Label fx:id="mappingWizardActionLabel"
+                           text="O assistente percorre cada função e aprende o controle que você mover."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Diagnóstico da controladora" styleClass="settings-title"/>
+                    <Label text="Registra tudo o que a controladora envia. Mova cada fader de ponta a ponta, gire cada encoder nos dois sentidos e pressione cada botão uma vez."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <Button text="Ver relatório" onAction="#handleShowMidiDiagnostics"
+                                styleClass="primary-button"/>
+                        <Button text="Salvar em arquivo" onAction="#handleSaveMidiDiagnosticsReport"
+                                styleClass="secondary-button"/>
+                        <Button text="Limpar" onAction="#handleClearMidiDiagnostics"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="midiDiagnosticsSummaryLabel"
+                           text="Nenhuma mensagem registrada ainda."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Perfis de controladora" styleClass="settings-title"/>
+                    <Label text="Guarde o mapeamento em arquivo para levar a outro computador ou voltar rapidamente ao mapa conhecido."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <Button text="Exportar perfil" onAction="#handleExportControllerProfile"
+                                styleClass="secondary-button"/>
+                        <Button text="Importar perfil" onAction="#handleImportControllerProfile"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <Button text="Aplicar layout da SMC-Mixer"
+                                onAction="#handleApplySmcMixerLayout" styleClass="secondary-button"/>
+                        <Button text="Ver tabela do layout" onAction="#handleShowSmcMixerTable"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="controllerProfileLabel"
+                           text="Nenhuma função com controle atribuído."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
                 <VBox spacing="14" styleClass="settings-card">
                     <Label text="Saída MIDI" styleClass="settings-title"/>
                     <Label text="Selecione o módulo ou sintetizador que receberá a reprodução."
@@ -226,19 +325,15 @@
                 </VBox>
 
                 <VBox spacing="10" styleClass="settings-card">
-                    <Label text="Controladora" styleClass="settings-title"/>
-                    <Label text="A configuração da SMC-Mixer será concluída após a identificação das mensagens MIDI."
-                           wrapText="true" styleClass="muted-label"/>
-                </VBox>
-
-                <VBox spacing="10" styleClass="settings-card">
                     <Label text="Sobre" styleClass="settings-title"/>
                     <Label text="Informações do aplicativo, versão e links do projeto."
                            styleClass="muted-label"/>
                     <Button text="Sobre o SuperMídia MIDI Player" onAction="#handleShowAbout"
                             styleClass="secondary-button"/>
                 </VBox>
-                <Region VBox.vgrow="ALWAYS"/>
+                        </VBox>
+                    </content>
+                </ScrollPane>
             </VBox>
         </StackPane>
     </center>
@@ -362,7 +457,7 @@
                     <Label fx:id="chordValueLabel" text="—" styleClass="chord-value"/>
                 </HBox>
                 <Separator orientation="VERTICAL"/>
-                <Label fx:id="midiOutputStatusLabel" text="MIDI: desconectado"
+                <Label fx:id="midiOutputStatusLabel" text="Saída: desconectada"
                        maxWidth="245" textOverrun="ELLIPSIS" styleClass="midi-output-label"/>
             </HBox>
         </VBox>

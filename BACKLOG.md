@@ -35,7 +35,11 @@
 
 ### Banco da SMC-Mixer
 
-Quando a controladora chegar, verificar se o botão Shift envia uma mensagem MIDI própria ou se apenas altera as mensagens dos demais controles. Essa descoberta definirá como o indicador de banco será sincronizado.
+O diagnóstico da entrada MIDI, em Configurações, responde a esta pergunta: pressionar o Shift
+e observar se aparece um controle novo na lista. Se aparecer, ele pode ser vinculado
+diretamente a `Mixer · Alternar banco`. Se não aparecer, o Shift só altera as mensagens dos
+demais controles e o banco precisa de um botão próprio — é o que o layout de referência
+assume, com uma nota dedicada à troca de banco.
 
 ### Acordes
 
