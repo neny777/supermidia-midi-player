@@ -1679,6 +1679,17 @@ public final class MainController {
                     handleStop();
                 }
             }
+            // Um botão só para o transporte: para se está tocando, toca se está parado.
+            // O estado vem do sequenciador, a mesma fonte que updateTransportControls() usa.
+            case PLAY_STOP_TOGGLE -> {
+                if (engine != null && engine.isRunning()) {
+                    if (!stopButton.isDisable()) {
+                        handleStop();
+                    }
+                } else if (!playButton.isDisable()) {
+                    handlePlay();
+                }
+            }
             case PREVIOUS -> {
                 if (!previousButton.isDisable()) {
                     handlePrevious();
@@ -1695,6 +1706,9 @@ public final class MainController {
                 }
             }
             case AUTOPLAY_TOGGLE -> automaticModeToggle.fire();
+            // Tom por botão: cada toque anda um semitom no mesmo slider do controle contínuo.
+            case TRANSPOSE_UP -> nudgeSlider(transposeSlider, 1);
+            case TRANSPOSE_DOWN -> nudgeSlider(transposeSlider, -1);
             case BANK_PREVIOUS -> setActiveMixerBank(0);
             case BANK_NEXT -> setActiveMixerBank(1);
             case BANK_TOGGLE -> setActiveMixerBank(activeMixerBank == 0 ? 1 : 0);
@@ -1722,6 +1736,18 @@ public final class MainController {
                 // Ações de disparo são tratadas separadamente.
             }
         }
+    }
+
+    /**
+     * Anda um passo fixo num slider, respeitando os limites dele.
+     * Usado pelas ações de tom em botão, que não carregam valor próprio como um knob.
+     */
+    private void nudgeSlider(Slider slider, int delta) {
+        if (slider.isDisable()) {
+            return;
+        }
+        double value = slider.getValue() + delta;
+        slider.setValue(Math.max(slider.getMin(), Math.min(slider.getMax(), value)));
     }
 
     private void applyMidiToSlider(Slider slider,

@@ -49,7 +49,7 @@ Classes envolvidas, em `br.com.supermidia.midi`:
 | `MidiControlMessage` | mensagem crua: command, channel, data1, data2 |
 | `MidiSignature` | identidade de um controle, sem o valor; funde Note Off em Note On |
 | `MidiBinding` | vínculo de um controle a uma função; modos TRIGGER, ABSOLUTE, RELATIVE |
-| `MidiLearnAction` | as 37 funções mapeáveis (transporte, gerais, 8 slots de mixer) |
+| `MidiLearnAction` | as 40 funções mapeáveis (transporte, gerais, 8 slots de mixer) |
 | `MidiInputDiagnostics` | agrupa o que chega e classifica cada controle |
 | `MidiMappingSession` | máquina de estados do assistente de mapeamento |
 | `ControllerProfile` | conjunto de vínculos, gravável em `.smprofile` |
@@ -74,7 +74,12 @@ embute um "preset de fábrica" adivinhado. Existem dois caminhos legítimos:
    CC 20–31 foi escolhida porque o General MIDI não a reserva para nada.
 
 Ao mexer no layout, mantenha `SmcMixerLayoutTest` verde: ele garante cobertura de todas as
-37 funções, ausência de controles repetidos e faders dentro da faixa livre.
+40 funções, ausência de controles repetidos e faders dentro da faixa livre.
+
+Três funções são controles de gatilho que evitam gastar knobs ou botões extras:
+`PLAY_STOP_TOGGLE` (um botão para tocar e parar, útil em controladora sem Stop físico)
+e `TRANSPOSE_UP`/`TRANSPOSE_DOWN` (um semitom por toque, para ajustar a tonalidade
+ao vivo sem usar o knob contínuo de tom).
 
 ### Detalhes do hardware que afetam o código
 

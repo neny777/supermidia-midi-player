@@ -38,6 +38,9 @@ public final class SmcMixerLayout {
     public static final int BANK_TOGGLE_NOTE = 59;
     public static final int BANK_PREVIOUS_NOTE = 60;
     public static final int BANK_NEXT_NOTE = 61;
+    public static final int PLAY_STOP_NOTE = 62;
+    public static final int TRANSPOSE_UP_NOTE = 63;
+    public static final int TRANSPOSE_DOWN_NOTE = 64;
 
     private SmcMixerLayout() {
     }
@@ -55,6 +58,9 @@ public final class SmcMixerLayout {
             case PLAY -> note(PLAY_NOTE);
             case PAUSE -> note(PAUSE_NOTE);
             case STOP -> note(STOP_NOTE);
+            case PLAY_STOP_TOGGLE -> note(PLAY_STOP_NOTE);
+            case TRANSPOSE_UP -> note(TRANSPOSE_UP_NOTE);
+            case TRANSPOSE_DOWN -> note(TRANSPOSE_DOWN_NOTE);
             case PREVIOUS -> note(PREVIOUS_NOTE);
             case NEXT -> note(NEXT_NOTE);
             case PANIC -> note(PANIC_NOTE);
@@ -119,6 +125,9 @@ public final class SmcMixerLayout {
         text.append(String.format("  Alternar banco 1–8 / 9–16  Nota %d%n", BANK_TOGGLE_NOTE));
         text.append(String.format("  Banco 1–8 ................ Nota %d%n", BANK_PREVIOUS_NOTE));
         text.append(String.format("  Banco 9–16 ............... Nota %d%n", BANK_NEXT_NOTE));
+        text.append(String.format("  Play/Stop (um botão) ..... Nota %d%n", PLAY_STOP_NOTE));
+        text.append(String.format("  Tom +1 semitom ........... Nota %d%n", TRANSPOSE_UP_NOTE));
+        text.append(String.format("  Tom −1 semitom ........... Nota %d%n", TRANSPOSE_DOWN_NOTE));
 
         text.append('\n');
         text.append("Observações\n");

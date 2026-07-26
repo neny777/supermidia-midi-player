@@ -8,11 +8,17 @@ public record MidiLearnAction(String id, String displayName, Kind kind, int slot
         PLAY,
         PAUSE,
         STOP,
+        /** Toca quando parado e para quando tocando: um único botão para o transporte. */
+        PLAY_STOP_TOGGLE,
         PREVIOUS,
         NEXT,
         PANIC,
         AUTOPLAY_TOGGLE,
         TRANSPOSE,
+        /** Sobe o tom em um semitom. Botão, não knob: útil para ajustar a tonalidade ao vivo. */
+        TRANSPOSE_UP,
+        /** Desce o tom em um semitom. */
+        TRANSPOSE_DOWN,
         SPEED,
         MASTER_VOLUME,
         BANK_PREVIOUS,
@@ -45,11 +51,17 @@ public record MidiLearnAction(String id, String displayName, Kind kind, int slot
         actions.add(new MidiLearnAction("transport.play", "Transporte · Play", Kind.PLAY, -1));
         actions.add(new MidiLearnAction("transport.pause", "Transporte · Pause", Kind.PAUSE, -1));
         actions.add(new MidiLearnAction("transport.stop", "Transporte · Stop", Kind.STOP, -1));
+        actions.add(new MidiLearnAction("transport.playStop", "Transporte · Play/Stop",
+                Kind.PLAY_STOP_TOGGLE, -1));
         actions.add(new MidiLearnAction("transport.previous", "Transporte · Anterior", Kind.PREVIOUS, -1));
         actions.add(new MidiLearnAction("transport.next", "Transporte · Próxima", Kind.NEXT, -1));
         actions.add(new MidiLearnAction("transport.panic", "Transporte · Panic", Kind.PANIC, -1));
         actions.add(new MidiLearnAction("transport.autoplay", "Transporte · Alternar Autoplay", Kind.AUTOPLAY_TOGGLE, -1));
         actions.add(new MidiLearnAction("global.transpose", "Geral · Tom", Kind.TRANSPOSE, -1));
+        actions.add(new MidiLearnAction("global.transpose.up", "Geral · Tom +1 semitom",
+                Kind.TRANSPOSE_UP, -1));
+        actions.add(new MidiLearnAction("global.transpose.down", "Geral · Tom −1 semitom",
+                Kind.TRANSPOSE_DOWN, -1));
         actions.add(new MidiLearnAction("global.speed", "Geral · Velocidade", Kind.SPEED, -1));
         actions.add(new MidiLearnAction("global.volume", "Geral · Volume", Kind.MASTER_VOLUME, -1));
         actions.add(new MidiLearnAction("mixer.bank.previous", "Mixer · Banco anterior", Kind.BANK_PREVIOUS, -1));
