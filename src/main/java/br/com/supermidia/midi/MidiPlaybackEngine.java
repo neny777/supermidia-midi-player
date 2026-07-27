@@ -104,6 +104,11 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         Objects.requireNonNull(file, "file");
         Sequence sequence = MidiSystem.getSequence(file);
         stop();
+        // Limpa o que a música anterior deixou no sintetizador — instrumentos, bancos
+        // e controladores. A mixagem é reaplicada em seguida, por resetChannelMix.
+        if (transformReceiver != null) {
+            transformReceiver.resetInstruments();
+        }
         sequencer.setSequence(sequence);
         sequencer.setTempoFactor(tempoFactor);
         loadedFile = file;

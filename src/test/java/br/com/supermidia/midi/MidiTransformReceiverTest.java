@@ -9,6 +9,7 @@ import javax.sound.midi.ShortMessage;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -125,6 +126,59 @@ class MidiTransformReceiverTest {
         assertEquals(ShortMessage.NOTE_ON, output.shortMessage(1).getCommand());
     }
 
+    @Test
+    void resetInstrumentsSendsGmSystemOnBeforeAnythingElse() {
+        RecordingReceiver output = new RecordingReceiver();
+        MidiTransformReceiver receiver = new MidiTransformReceiver(output);
+
+        receiver.resetInstruments();
+
+        // O SysEx padrão precisa vir primeiro: é ele que devolve o dispositivo ao GM,
+        // com o canal 10 de novo em percussão.
+        MidiMessage first = output.message(0);
+        assertArrayEquals(
+                new byte[] {(byte) 0xF0, 0x7E, 0x7F, 0x09, 0x01, (byte) 0xF7},
+                first.getMessage(),
+                "primeira mensagem deveria ser GM System On");
+    }
+
+    @Test
+    void resetInstrumentsRestoresEveryChannelToTheDefaultProgram() {
+        RecordingReceiver output = new RecordingReceiver();
+        MidiTransformReceiver receiver = new MidiTransformReceiver(output);
+
+        receiver.resetInstruments();
+
+        // Sem isto, a bateria da próxima música toca com o instrumento que sobrou
+        // no canal de percussão — o arquivo seguinte costuma não reenviar o programa.
+        for (int channel = 0; channel < 16; channel++) {
+            assertTrue(output.hasShortMessage(ShortMessage.PROGRAM_CHANGE, channel, 0),
+                    "faltou Program Change 0 no canal " + (channel + 1));
+            assertTrue(output.hasShortMessage(ShortMessage.CONTROL_CHANGE, channel, 121),
+                    "faltou Reset All Controllers no canal " + (channel + 1));
+            assertTrue(output.hasShortMessage(ShortMessage.CONTROL_CHANGE, channel, 0),
+                    "faltou Bank Select MSB no canal " + (channel + 1));
+        }
+    }
+
+    @Test
+    void resetInstrumentsForgetsNotesLeftSoundingByThePreviousSong()
+            throws InvalidMidiDataException {
+        RecordingReceiver output = new RecordingReceiver();
+        MidiTransformReceiver receiver = new MidiTransformReceiver(output);
+        receiver.setTranspose(5);
+        receiver.send(message(ShortMessage.NOTE_ON, 0, 60, 100), -1);
+
+        receiver.resetInstruments();
+        receiver.setTranspose(0);
+        output.clear();
+
+        // O Note Off que chegar depois não pode reviver o mapeamento antigo: a nota
+        // já foi encerrada pelo reset.
+        receiver.send(message(ShortMessage.NOTE_OFF, 0, 60, 0), -1);
+        assertEquals(60, output.shortMessage(0).getData1());
+    }
+
     private static ShortMessage message(int command, int channel, int data1, int data2)
             throws InvalidMidiDataException {
         ShortMessage message = new ShortMessage();
@@ -146,6 +200,19 @@ class MidiTransformReceiverTest {
 
         ShortMessage shortMessage(int index) {
             return (ShortMessage) messages.get(index);
+        }
+
+        MidiMessage message(int index) {
+            return messages.get(index);
+        }
+
+        boolean hasShortMessage(int command, int channel, int data1) {
+            return messages.stream()
+                    .filter(ShortMessage.class::isInstance)
+                    .map(ShortMessage.class::cast)
+                    .anyMatch(candidate -> candidate.getCommand() == command
+                            && candidate.getChannel() == channel
+                            && candidate.getData1() == data1);
         }
 
         void clear() {

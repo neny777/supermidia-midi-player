@@ -4,6 +4,7 @@ import javax.sound.midi.InvalidMidiDataException;
 import javax.sound.midi.MidiMessage;
 import javax.sound.midi.Receiver;
 import javax.sound.midi.ShortMessage;
+import javax.sound.midi.SysexMessage;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -11,9 +12,19 @@ public final class MidiTransformReceiver implements Receiver {
     private static final int MIDI_CHANNELS = 16;
     private static final int MIDI_NOTES = 128;
     private static final int PERCUSSION_CHANNEL = 9;
+    private static final int BANK_SELECT_MSB = 0;
     private static final int CHANNEL_VOLUME = 7;
+    private static final int BANK_SELECT_LSB = 32;
     private static final int ALL_SOUND_OFF = 120;
+    private static final int RESET_ALL_CONTROLLERS = 121;
     private static final int ALL_NOTES_OFF = 123;
+
+    /**
+     * "GM System On": devolve o dispositivo ao padrão General MIDI — programas em 0,
+     * controladores zerados e, sobretudo, o canal 10 de volta a percussão.
+     */
+    private static final byte[] GM_SYSTEM_ON =
+            {(byte) 0xF0, 0x7E, 0x7F, 0x09, 0x01, (byte) 0xF7};
 
     private final Receiver delegate;
     private final int[][] activeOutputNotes = new int[MIDI_CHANNELS][MIDI_NOTES];
@@ -134,6 +145,39 @@ public final class MidiTransformReceiver implements Receiver {
     public synchronized void silence() {
         for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
             silenceChannel(channel);
+        }
+    }
+
+    /**
+     * Devolve o sintetizador ao estado padrão antes de carregar outra música.
+     *
+     * <p>Sem isso o dispositivo guarda o que a música anterior deixou: instrumentos,
+     * bancos, pitch bend, sustain. O sintoma mais visível é a bateria da música
+     * seguinte tocando com o som melódico que sobrou no canal de percussão, porque
+     * a maioria dos arquivos só envia Program Change para os canais que usa e conta
+     * com o dispositivo nos valores de fábrica.</p>
+     *
+     * <p>Manda o SysEx padrão e, em seguida, repete a limpeza canal a canal em
+     * mensagens comuns — alguns dispositivos ignoram SysEx, e o custo de repetir
+     * entre duas músicas é irrelevante.</p>
+     */
+    public synchronized void resetInstruments() {
+        if (closed) {
+            return;
+        }
+        try {
+            delegate.send(new SysexMessage(GM_SYSTEM_ON, GM_SYSTEM_ON.length), -1);
+        } catch (InvalidMidiDataException exception) {
+            throw new IllegalStateException("SysEx de GM System On inválido", exception);
+        }
+        for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
+            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, ALL_SOUND_OFF, 0, -1);
+            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, ALL_NOTES_OFF, 0, -1);
+            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, RESET_ALL_CONTROLLERS, 0, -1);
+            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, BANK_SELECT_MSB, 0, -1);
+            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, BANK_SELECT_LSB, 0, -1);
+            sendShortMessage(ShortMessage.PROGRAM_CHANGE, channel, 0, 0, -1);
+            Arrays.fill(activeOutputNotes[channel], -1);
         }
     }
 
