@@ -3,6 +3,7 @@ package br.com.supermidia.app;
 import br.com.supermidia.core.PlaybackMode;
 import br.com.supermidia.lyrics.LyricLine;
 import br.com.supermidia.lyrics.MidiLyrics;
+import br.com.supermidia.midi.ControllerPickup;
 import br.com.supermidia.midi.ControllerProfile;
 import br.com.supermidia.midi.MidiBinding;
 import br.com.supermidia.midi.MidiControlMessage;
@@ -27,8 +28,10 @@ import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
+import javafx.geometry.Bounds;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
@@ -117,7 +120,6 @@ public final class MainController {
     private static final long MIDI_INPUT_ACTIVITY_TIMEOUT_NANOS = 350_000_000L;
     private static final long MIDI_LEARN_RELEASE_TIMEOUT_NANOS = 400_000_000L;
     private static final long MAPPING_COOLDOWN_NANOS = 700_000_000L;
-    private static final double MIXER_PICKUP_THRESHOLD = 2.5 / 127.0;
     @FXML
     private Label currentSongLabel;
     @FXML
@@ -288,9 +290,10 @@ public final class MainController {
     private MidiBinding mappingCooldownBinding;
     private long mappingCooldownReleaseNanos;
     private int activeMixerBank;
-    private final boolean[] mixerPickupArmed = new boolean[MIXER_BANK_SIZE];
-    private final boolean[] mixerControllerValueKnown = new boolean[MIXER_BANK_SIZE];
-    private final double[] mixerLastControllerValue = new double[MIXER_BANK_SIZE];
+    private final ControllerPickup[] mixerPickups =
+            ControllerPickup.array(MIXER_BANK_SIZE);
+    /** Pickup dos controles contínuos globais: tom, velocidade e volume geral. */
+    private final Map<Slider, ControllerPickup> globalPickups = new HashMap<>();
     private Stage pianoStage;
 
     @FXML
@@ -789,6 +792,7 @@ public final class MainController {
 
         try {
             engine.load(item.path().toFile());
+            resetSongAdjustments();
             playlist.select(index);
             loadMixer(item);
             loadLyrics(item);
@@ -802,6 +806,22 @@ public final class MainController {
                     "O arquivo selecionado não pôde ser lido como MIDI válido.", exception);
             return false;
         }
+    }
+
+    /**
+     * Devolve tom e velocidade ao padrão ao trocar de música.
+     *
+     * <p>São ajustes de uma canção específica: o tom escolhido para uma não vale para
+     * a seguinte, e mantê-lo faz a próxima entrar fora do tom sem aviso. O volume geral
+     * não entra aqui de propósito — ele é o nível da apresentação, não uma propriedade
+     * do arquivo, e zerá-lo entre músicas atrapalharia em vez de ajudar.</p>
+     */
+    private void resetSongAdjustments() {
+        transposeSlider.setValue(0);
+        speedSlider.setValue(100);
+        // Os valores mudaram fora da controladora: os knobs precisam reconquistá-los.
+        armGlobalPickup(transposeSlider);
+        armGlobalPickup(speedSlider);
     }
 
     private void setLoadedSongUi(PlaylistItem item) {
@@ -877,6 +897,39 @@ public final class MainController {
         int value = roundedSliderValue(slider.getValue(), step);
         slider.setValue(value);
         menuButton.setText(formatter.apply(value));
+        configureStepOnTrackClick(slider, step);
+    }
+
+    /**
+     * Faz o clique na trilha andar um passo, em vez de saltar para o ponto clicado.
+     *
+     * <p>O comportamento padrão do {@code Slider} é levar o cursor direto para onde
+     * se clicou. Num controle vertical alto, com o mínimo embaixo, isso significa que
+     * um clique na parte inferior joga o volume para o silêncio de uma só vez —
+     * inaceitável durante uma apresentação. Arrastar o cursor continua livre.</p>
+     */
+    private void configureStepOnTrackClick(Slider slider, int step) {
+        slider.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+            // Mexer pelo mouse dessincroniza o knob: ele volta a precisar alcançar o valor
+            // antes de assumir o controle, em vez de saltar no próximo toque.
+            armGlobalPickup(slider);
+
+            Node thumb = slider.lookup(".thumb");
+            if (thumb == null) {
+                return;
+            }
+            Bounds thumbBounds = thumb.getBoundsInParent();
+            if (thumbBounds.contains(event.getX(), event.getY())) {
+                return;
+            }
+
+            boolean increase = slider.getOrientation() == Orientation.VERTICAL
+                    ? event.getY() < thumbBounds.getMinY()
+                    : event.getX() > thumbBounds.getMaxX();
+            double target = slider.getValue() + (increase ? step : -step);
+            slider.setValue(Math.max(slider.getMin(), Math.min(slider.getMax(), target)));
+            event.consume();
+        });
     }
 
     private int roundedSliderValue(double value, int step) {
@@ -1646,8 +1699,7 @@ public final class MainController {
             recentlyLearnedBindingReleaseNanos =
                     System.nanoTime() + MIDI_LEARN_RELEASE_TIMEOUT_NANOS;
             if (action.kind() == MidiLearnAction.Kind.BANK_VOLUME) {
-                mixerPickupArmed[action.slot()] = true;
-                mixerControllerValueKnown[action.slot()] = false;
+                mixerPickups[action.slot()].arm();
             }
         }
         learningMidiAction = null;
@@ -1768,18 +1820,50 @@ public final class MainController {
         }
         double value = slider.getValue() + delta;
         slider.setValue(Math.max(slider.getMin(), Math.min(slider.getMax(), value)));
+        // O valor mudou por outro caminho; o knob correspondente perde o controle
+        // até alcançá-lo de novo.
+        armGlobalPickup(slider);
     }
 
+    /**
+     * Aplica um controle contínuo da controladora a tom, velocidade ou volume geral.
+     *
+     * <p>Usa <em>pickup</em>, o mesmo princípio já adotado nos faders do mixer: encostar
+     * no knob não muda nada até que ele alcance o valor que está na tela. Sem isso, tocar
+     * no controle faria o valor saltar para a posição física do knob — e no volume geral
+     * isso significa um pulo de nível no meio da música.</p>
+     */
     private void applyMidiToSlider(Slider slider,
                                    double absolute,
                                    int delta,
                                    boolean relative,
                                    int step) {
-        double value = relative
-                ? slider.getValue() + delta * step
-                : slider.getMin() + absolute * (slider.getMax() - slider.getMin());
+        if (relative) {
+            // Encoder relativo não tem posição própria: cada passo é somado ao valor atual,
+            // então nunca há salto e o pickup não faz sentido.
+            setSliderValue(slider, slider.getValue() + delta * step, step);
+            return;
+        }
+
+        ControllerPickup pickup =
+                globalPickups.computeIfAbsent(slider, ignored -> new ControllerPickup());
+        if (!pickup.accepts(absolute, normalizedValue(slider))) {
+            return;
+        }
+        setSliderValue(slider, denormalizedValue(slider, absolute), step);
+    }
+
+    private void setSliderValue(Slider slider, double value, int step) {
         slider.setValue(roundedSliderValue(
                 Math.max(slider.getMin(), Math.min(slider.getMax(), value)), step));
+    }
+
+    /** Rearma o pickup dos controles globais: o knob volta a precisar alcançar o valor. */
+    private void armGlobalPickup(Slider slider) {
+        ControllerPickup pickup = globalPickups.get(slider);
+        if (pickup != null) {
+            pickup.arm();
+        }
     }
 
     private void applyMidiToMixerFader(int slot,
@@ -1792,25 +1876,24 @@ public final class MainController {
             return;
         }
         if (relative) {
-            slider.setValue(Math.max(slider.getMin(),
-                    Math.min(slider.getMax(), slider.getValue() + delta)));
+            setSliderValue(slider, slider.getValue() + delta, 1);
             return;
         }
-
-        double target = slider.getValue() / slider.getMax();
-        double previous = mixerLastControllerValue[slot];
-        mixerLastControllerValue[slot] = absolute;
-        if (mixerPickupArmed[slot]) {
-            boolean closeEnough = Math.abs(absolute - target) <= MIXER_PICKUP_THRESHOLD;
-            boolean crossedTarget = mixerControllerValueKnown[slot]
-                    && (previous - target) * (absolute - target) <= 0;
-            mixerControllerValueKnown[slot] = true;
-            if (!closeEnough && !crossedTarget) {
-                return;
-            }
-            mixerPickupArmed[slot] = false;
+        if (!mixerPickups[slot].accepts(absolute, normalizedValue(slider))) {
+            return;
         }
-        slider.setValue(Math.round(absolute * slider.getMax()));
+        setSliderValue(slider, denormalizedValue(slider, absolute), 1);
+    }
+
+    /** Posição atual do slider na escala de 0 a 1 que o pickup usa. */
+    private static double normalizedValue(Slider slider) {
+        double span = slider.getMax() - slider.getMin();
+        return span <= 0 ? 0 : (slider.getValue() - slider.getMin()) / span;
+    }
+
+    /** Caminho inverso: converte a posição do controle físico na escala do slider. */
+    private static double denormalizedValue(Slider slider, double normalized) {
+        return slider.getMin() + normalized * (slider.getMax() - slider.getMin());
     }
 
     private void fireMixerToggle(ToggleButton[] buttons, int slot) {
@@ -1831,9 +1914,8 @@ public final class MainController {
     }
 
     private void armMixerPickup() {
-        for (int slot = 0; slot < MIXER_BANK_SIZE; slot++) {
-            mixerPickupArmed[slot] = true;
-            mixerControllerValueKnown[slot] = false;
+        for (ControllerPickup pickup : mixerPickups) {
+            pickup.arm();
         }
     }
 

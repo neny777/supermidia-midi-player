@@ -390,16 +390,16 @@
                         </MenuButton>
                     </VBox>
                     <VBox alignment="CENTER" spacing="2" styleClass="selector-block">
-                        <Label text="VELOCIDADE" styleClass="micro-label"/>
-                        <MenuButton fx:id="speedMenuButton" text="100%"
+                        <Label text="VOLUME" styleClass="micro-label"/>
+                        <MenuButton fx:id="masterVolumeMenuButton" text="100%"
                                     styleClass="quick-popup-control">
                             <items>
                                 <CustomMenuItem hideOnClick="false" styleClass="slider-menu-item">
                                     <content>
                                         <VBox alignment="CENTER" spacing="6" styleClass="vertical-slider-popup">
-                                            <Label text="VELOCIDADE" styleClass="popup-slider-title"/>
-                                            <Slider fx:id="speedSlider" orientation="VERTICAL"
-                                                    min="50" max="150" value="100"
+                                            <Label text="VOLUME" styleClass="popup-slider-title"/>
+                                            <Slider fx:id="masterVolumeSlider" orientation="VERTICAL"
+                                                    min="0" max="100" value="100"
                                                     prefWidth="120" prefHeight="450"
                                                     blockIncrement="5" majorTickUnit="25" minorTickCount="4"
                                                     showTickMarks="true" showTickLabels="true" snapToTicks="true"
@@ -411,16 +411,16 @@
                         </MenuButton>
                     </VBox>
                     <VBox alignment="CENTER" spacing="2" styleClass="selector-block">
-                        <Label text="VOLUME" styleClass="micro-label"/>
-                        <MenuButton fx:id="masterVolumeMenuButton" text="100%"
+                        <Label text="VELOCIDADE" styleClass="micro-label"/>
+                        <MenuButton fx:id="speedMenuButton" text="100%"
                                     styleClass="quick-popup-control">
                             <items>
                                 <CustomMenuItem hideOnClick="false" styleClass="slider-menu-item">
                                     <content>
                                         <VBox alignment="CENTER" spacing="6" styleClass="vertical-slider-popup">
-                                            <Label text="VOLUME" styleClass="popup-slider-title"/>
-                                            <Slider fx:id="masterVolumeSlider" orientation="VERTICAL"
-                                                    min="0" max="100" value="100"
+                                            <Label text="VELOCIDADE" styleClass="popup-slider-title"/>
+                                            <Slider fx:id="speedSlider" orientation="VERTICAL"
+                                                    min="50" max="150" value="100"
                                                     prefWidth="120" prefHeight="450"
                                                     blockIncrement="5" majorTickUnit="25" minorTickCount="4"
                                                     showTickMarks="true" showTickLabels="true" snapToTicks="true"
