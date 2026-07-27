@@ -64,7 +64,8 @@ Os vínculos são persistidos em `Preferences` com o prefixo `midiBinding.<actio
 ### Decisão de projeto importante
 
 A SMC-Mixer **não tem mapa de fábrica documentado e confiável** — cada controle é
-reprogramável pelo editor do fabricante (CubeSuite / MidiSuite). Por isso o projeto não
+reprogramável pelo **MidiSuite**, o editor da M-VAVE (em `m-vave.com/download`; o CubeSuite,
+apesar de citado em fóruns, é para pedaleiras e loopers e não lista a SMC-Mixer). Por isso o projeto não
 embute um "preset de fábrica" adivinhado. Existem dois caminhos legítimos:
 
 1. **Assistente de mapeamento** — aprende o que a controladora já envia, função por função.

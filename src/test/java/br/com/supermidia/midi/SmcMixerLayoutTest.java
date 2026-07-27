@@ -30,18 +30,26 @@ class SmcMixerLayoutTest {
     }
 
     @Test
-    void usesAbsoluteControlChangesForContinuousActionsAndNotesForTriggers() {
+    void usesControlChangeForEveryControlWithTheModeMatchingTheAction() {
         ControllerProfile profile = SmcMixerLayout.profile();
 
+        // O layout usa CC em tudo, inclusive nos botões: um tipo só reduz o trabalho
+        // de programar a controladora. O que distingue botão de fader é o ValueMode.
         for (MidiLearnAction action : MidiLearnAction.defaultActions()) {
             MidiBinding binding = profile.bindings().get(action.id());
-            if (action.kind().isContinuous()) {
-                assertEquals(ShortMessage.CONTROL_CHANGE, binding.command(), action.id());
-                assertEquals(MidiBinding.ValueMode.ABSOLUTE, binding.valueMode(), action.id());
-            } else {
-                assertEquals(ShortMessage.NOTE_ON, binding.command(), action.id());
-                assertEquals(MidiBinding.ValueMode.TRIGGER, binding.valueMode(), action.id());
-            }
+            assertEquals(ShortMessage.CONTROL_CHANGE, binding.command(), action.id());
+            assertEquals(action.kind().isContinuous()
+                            ? MidiBinding.ValueMode.ABSOLUTE
+                            : MidiBinding.ValueMode.TRIGGER,
+                    binding.valueMode(), action.id());
+        }
+    }
+
+    @Test
+    void keepsEveryControlNumberWithinTheValidControlChangeRange() {
+        for (MidiBinding binding : SmcMixerLayout.profile().bindings().values()) {
+            assertTrue(binding.data1() >= 0 && binding.data1() <= 119,
+                    "CC fora da faixa utilizável: " + binding.description());
         }
     }
 
@@ -61,9 +69,20 @@ class SmcMixerLayoutTest {
     void setupTableListsEveryFaderAndTransportButton() {
         String table = SmcMixerLayout.setupTable();
 
-        assertTrue(table.contains("CC 20"));
-        assertTrue(table.contains("CC 27"));
-        assertTrue(table.contains("Nota 52"));
+        assertTrue(table.contains("CC 21"), "primeiro fader");
+        assertTrue(table.contains("CC 28"), "último fader");
+        assertTrue(table.contains("CC 0"), "botão de play/stop");
         assertTrue(table.contains("USB-C"));
+    }
+
+    @Test
+    void setupTablePointsToTheRightEditorAndWarnsOtherControllers() {
+        String table = SmcMixerLayout.setupTable();
+
+        // O CubeSuite não reconhece a SMC-Mixer; mandar o usuário até ele é um beco sem saída.
+        assertTrue(table.contains("MidiSuite"), "cita o editor correto");
+        assertTrue(table.contains("m-vave.com/download"), "diz onde baixar");
+        assertTrue(table.contains("Usando outra controladora"),
+                "avisa que a tabela não serve para outros modelos");
     }
 }
