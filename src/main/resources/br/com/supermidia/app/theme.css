@@ -89,15 +89,11 @@
     -fx-min-width: 50px;
 }
 
-.midi-input-chip {
-    -fx-min-width: 160px;
-    -fx-pref-width: 160px;
-    -fx-max-width: 160px;
-    -fx-background-color: #111925;
-    -fx-border-color: #293546;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-padding: 8 11;
+/* Entrada e saída MIDI vivem lado a lado no rodapé, com o mesmo peso visual:
+   uma bolinha de estado e o nome do dispositivo, no visual plano da barra. */
+.midi-connection {
+    -fx-min-width: 190px;
+    -fx-pref-width: 210px;
 }
 
 .connection-dot-active {
@@ -172,10 +168,12 @@
     -fx-background-radius: 10;
 }
 
+/* A letra é o elemento mais importante da tela de apresentação: ela fica sem
+   teto de altura para aproveitar telas maiores que os 1366x768 de referência.
+   O mixer mantém o teto dele, então o espaço extra vem todo para cá. */
 .lyrics-card {
     -fx-min-height: 210px;
-    -fx-pref-height: 220px;
-    -fx-max-height: 280px;
+    -fx-pref-height: 240px;
     -fx-padding: 14 28;
 }
 
@@ -185,33 +183,35 @@
 
 .lyrics-viewport {
     -fx-min-height: 188px;
-    -fx-pref-height: 188px;
-    -fx-max-height: 188px;
 }
 
+/* Sem altura fixa: cada frase acompanha o próprio tamanho de fonte, que o
+   MainController ajusta conforme a altura disponível. O 48px aqui é só o
+   ponto de partida, antes de a janela ter tamanho. */
 .lyrics-line {
-    -fx-min-height: 60px;
-    -fx-pref-height: 60px;
-    -fx-max-height: 60px;
     -fx-text-fill: #f3f5f8;
     -fx-font-size: 48px;
     -fx-font-weight: 600;
     -fx-alignment: CENTER;
 }
 
+/* Mesma altura do .lyrics-card (240px) para os dois blocos ficarem alinhados na
+   tela não maximizada. Ao mudar aqui, ajuste também a altura do fader em
+   MainController.createChannelStrip: a tira é o fader mais ~146px de rótulos,
+   botões e espaçamentos. */
 .mixer-banks {
-    -fx-min-height: 296px;
-    -fx-pref-height: 310px;
-    -fx-max-height: 320px;
+    -fx-min-height: 232px;
+    -fx-pref-height: 240px;
+    -fx-max-height: 248px;
     -fx-background-color: #0f1722;
     -fx-background-radius: 9;
     -fx-padding: 6 5 5 5;
 }
 
 .mixer-bank {
-    -fx-min-height: 296px;
-    -fx-pref-height: 306px;
-    -fx-max-height: 316px;
+    -fx-min-height: 232px;
+    -fx-pref-height: 236px;
+    -fx-max-height: 244px;
     -fx-background-color: transparent;
     -fx-padding: 0;
 }
@@ -230,13 +230,16 @@
     -fx-border-width: 2 0 0 0;
 }
 
+/* Sem altura fixa: a tira preenche a altura do .mixer-bank e o fader dentro dela
+   absorve a sobra (VBox.vgrow em createMixerChannelStrip). Assim, mudar a altura
+   do mixer reajusta o fader sozinho — antes eram três valores que precisavam
+   concordar à mão, e bastava esquecer um para a tira estourar o container. */
 .mixer-channel-strip {
     -fx-min-width: 0;
     -fx-pref-width: 66px;
     -fx-max-width: 90px;
-    -fx-min-height: 262px;
-    -fx-pref-height: 280px;
-    -fx-max-height: 290px;
+    -fx-min-height: 190px;
+    -fx-max-height: Infinity;
     -fx-background-color: #121c28;
     -fx-border-color: #273444;
     -fx-border-radius: 7;
@@ -340,6 +343,13 @@
 .settings-card {
     -fx-max-width: 760px;
     -fx-padding: 17 19;
+}
+
+/* Separa o que é uso diário (saída, entrada, perfis) das ferramentas de
+   montagem, que só interessam ao configurar um controlador novo. */
+.settings-group-heading {
+    -fx-max-width: 760px;
+    -fx-padding: 12 2 0 2;
 }
 
 .settings-title {
@@ -610,9 +620,7 @@
     -fx-font-weight: 800;
 }
 
-.midi-output-label {
-    -fx-min-width: 170px;
-    -fx-pref-width: 225px;
+.midi-connection-label {
     -fx-text-fill: #d5dbe4;
     -fx-font-size: 13px;
 }

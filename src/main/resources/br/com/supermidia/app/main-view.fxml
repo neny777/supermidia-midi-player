@@ -65,14 +65,6 @@
                        styleClass="next-song-name"/>
             </HBox>
 
-            <HBox alignment="CENTER" spacing="7" styleClass="midi-input-chip">
-                <Label fx:id="midiInputConnectionDot" text="●"
-                       styleClass="connection-dot, connection-dot-disconnected"/>
-                <Label fx:id="midiInputStatusLabel" text="Entrada: nenhuma"
-                       maxWidth="Infinity" textOverrun="ELLIPSIS"
-                       styleClass="midi-input-value"/>
-            </HBox>
-
             <Button fx:id="panicButton" text="PANIC" disable="true"
                     onAction="#handlePanic" styleClass="panic-button">
                 <tooltip>
@@ -133,9 +125,9 @@
     <center>
         <StackPane>
             <VBox fx:id="presentationView" alignment="CENTER" spacing="12"
-                  maxWidth="1700" maxHeight="650"
+                  maxWidth="1900" maxHeight="Infinity"
                   styleClass="content-area">
-                <VBox alignment="CENTER" spacing="8" maxHeight="280"
+                <VBox alignment="CENTER" spacing="8" maxHeight="Infinity"
                       VBox.vgrow="ALWAYS" styleClass="lyrics-card">
                     <Label fx:id="stageLyricsStatusLabel" text="LETRA SINCRONIZADA"
                            visible="false" managed="false"/>
@@ -144,15 +136,15 @@
                         <VBox fx:id="lyricsLinesContainer" alignment="TOP_CENTER" spacing="4"
                               maxWidth="Infinity" StackPane.alignment="TOP_CENTER">
                             <Label fx:id="stagePreviousLyricLabel" text="" styleClass="lyrics-line"
-                                   wrapText="true" textAlignment="CENTER" maxWidth="1200"/>
+                                   wrapText="true" textAlignment="CENTER" maxWidth="Infinity"/>
                             <Label fx:id="stageCurrentLyricLabel" text=""
                                    styleClass="lyrics-line" wrapText="true"
-                                   textAlignment="CENTER" maxWidth="1200"/>
+                                   textAlignment="CENTER" maxWidth="Infinity"/>
                             <Label fx:id="stageNextLyricLabel" text=""
                                    styleClass="lyrics-line" wrapText="true"
-                                   textAlignment="CENTER" maxWidth="1200"/>
+                                   textAlignment="CENTER" maxWidth="Infinity"/>
                             <Label fx:id="stageIncomingLyricLabel" text="" styleClass="lyrics-line"
-                                   wrapText="true" textAlignment="CENTER" maxWidth="1200"/>
+                                   wrapText="true" textAlignment="CENTER" maxWidth="Infinity"/>
                         </VBox>
                     </StackPane>
                 </VBox>
@@ -161,12 +153,12 @@
                     <VBox fx:id="mixerBankOnePanel" alignment="TOP_RIGHT" spacing="4" HBox.hgrow="ALWAYS"
                           styleClass="mixer-bank, mixer-bank-active">
                         <HBox fx:id="mixerBankOneContainer" alignment="TOP_RIGHT" spacing="4"
-                              fillHeight="false" maxWidth="Infinity"/>
+                              fillHeight="true" maxWidth="Infinity" VBox.vgrow="ALWAYS"/>
                     </VBox>
                     <VBox fx:id="mixerBankTwoPanel" alignment="TOP_LEFT" spacing="4" HBox.hgrow="ALWAYS"
                           styleClass="mixer-bank, mixer-bank-inactive">
                         <HBox fx:id="mixerBankTwoContainer" alignment="TOP_LEFT" spacing="4"
-                              fillHeight="false" maxWidth="Infinity"/>
+                              fillHeight="true" maxWidth="Infinity" VBox.vgrow="ALWAYS"/>
                     </VBox>
                 </HBox>
             </VBox>
@@ -221,6 +213,19 @@
                     <content>
                         <VBox spacing="18">
                 <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Saída MIDI" styleClass="settings-title"/>
+                    <Label text="Selecione o módulo ou sintetizador que receberá a reprodução."
+                           styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <ComboBox fx:id="midiOutputComboBox" promptText="Selecionar saída MIDI"
+                                  onAction="#handleMidiOutputSelection" styleClass="device-combo"
+                                  HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Button text="Atualizar" onAction="#handleRefreshMidiOutputs"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
                     <Label text="Entrada MIDI" styleClass="settings-title"/>
                     <Label text="Selecione uma controladora, teclado ou outro dispositivo que enviará comandos ao player."
                            wrapText="true" styleClass="muted-label"/>
@@ -233,6 +238,27 @@
                     </HBox>
                     <Label fx:id="midiInputMonitorLabel"
                            text="Nenhum dispositivo de entrada selecionado."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Perfis de controladora" styleClass="settings-title"/>
+                    <Label text="Guarde o mapeamento em arquivo para levar a outro computador ou voltar rapidamente ao mapa conhecido."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <Button text="Importar perfil" onAction="#handleImportControllerProfile"
+                                styleClass="primary-button"/>
+                        <Button text="Exportar perfil" onAction="#handleExportControllerProfile"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="controllerProfileLabel"
+                           text="Nenhuma função com controle atribuído."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="4" styleClass="settings-group-heading">
+                    <Label text="FERRAMENTAS DE CONTROLADORA" styleClass="eyebrow"/>
+                    <Label text="Usadas ao configurar um controlador novo. Depois que o mapeamento está pronto, não precisam ser abertas."
                            wrapText="true" styleClass="muted-label"/>
                 </VBox>
 
@@ -291,36 +317,14 @@
                 </VBox>
 
                 <VBox spacing="14" styleClass="settings-card">
-                    <Label text="Perfis de controladora" styleClass="settings-title"/>
-                    <Label text="Guarde o mapeamento em arquivo para levar a outro computador ou voltar rapidamente ao mapa conhecido."
+                    <Label text="Layout de referência da SMC-Mixer" styleClass="settings-title"/>
+                    <Label text="Alternativa ao assistente: programe a controladora com a tabela indicada e aplique o layout correspondente, de uma vez."
                            wrapText="true" styleClass="muted-label"/>
                     <HBox alignment="CENTER_LEFT" spacing="8">
-                        <Button text="Exportar perfil" onAction="#handleExportControllerProfile"
-                                styleClass="secondary-button"/>
-                        <Button text="Importar perfil" onAction="#handleImportControllerProfile"
-                                styleClass="secondary-button"/>
-                    </HBox>
-                    <HBox alignment="CENTER_LEFT" spacing="8">
-                        <Button text="Aplicar layout da SMC-Mixer"
-                                onAction="#handleApplySmcMixerLayout" styleClass="secondary-button"/>
                         <Button text="Ver tabela do layout" onAction="#handleShowSmcMixerTable"
                                 styleClass="secondary-button"/>
-                    </HBox>
-                    <Label fx:id="controllerProfileLabel"
-                           text="Nenhuma função com controle atribuído."
-                           wrapText="true" styleClass="muted-label"/>
-                </VBox>
-
-                <VBox spacing="14" styleClass="settings-card">
-                    <Label text="Saída MIDI" styleClass="settings-title"/>
-                    <Label text="Selecione o módulo ou sintetizador que receberá a reprodução."
-                           styleClass="muted-label"/>
-                    <HBox alignment="CENTER_LEFT" spacing="8">
-                        <ComboBox fx:id="midiOutputComboBox" promptText="Selecionar saída MIDI"
-                                  onAction="#handleMidiOutputSelection" styleClass="device-combo"
-                                  HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                        <Button text="Atualizar" onAction="#handleRefreshMidiOutputs"
-                                styleClass="secondary-button"/>
+                        <Button text="Aplicar layout da SMC-Mixer"
+                                onAction="#handleApplySmcMixerLayout" styleClass="secondary-button"/>
                     </HBox>
                 </VBox>
 
@@ -449,16 +453,31 @@
 
             <HBox alignment="CENTER_LEFT" spacing="12" styleClass="progress-bar-area">
                 <Label fx:id="currentTimeLabel" text="00:00" styleClass="time-label"/>
-                <Slider fx:id="progressSlider" value="0" disable="true" HBox.hgrow="ALWAYS"/>
+                <Slider fx:id="progressSlider" value="0" disable="true"
+                        maxWidth="430" HBox.hgrow="ALWAYS"/>
                 <Label fx:id="durationTimeLabel" text="00:00" styleClass="time-label"/>
+                <Region HBox.hgrow="ALWAYS"/>
                 <Separator orientation="VERTICAL"/>
                 <HBox alignment="CENTER" spacing="7" styleClass="chord-block">
                     <Label text="ACORDE" styleClass="micro-label"/>
                     <Label fx:id="chordValueLabel" text="—" styleClass="chord-value"/>
                 </HBox>
                 <Separator orientation="VERTICAL"/>
-                <Label fx:id="midiOutputStatusLabel" text="Saída: desconectada"
-                       maxWidth="245" textOverrun="ELLIPSIS" styleClass="midi-output-label"/>
+                <HBox alignment="CENTER_LEFT" spacing="7" styleClass="midi-connection">
+                    <Label fx:id="midiInputConnectionDot" text="●"
+                           styleClass="connection-dot, connection-dot-disconnected"/>
+                    <Label fx:id="midiInputStatusLabel" text="Entrada: nenhuma"
+                           maxWidth="Infinity" textOverrun="ELLIPSIS"
+                           HBox.hgrow="ALWAYS" styleClass="midi-connection-label"/>
+                </HBox>
+                <Separator orientation="VERTICAL"/>
+                <HBox alignment="CENTER_LEFT" spacing="7" styleClass="midi-connection">
+                    <Label fx:id="midiOutputConnectionDot" text="●"
+                           styleClass="connection-dot, connection-dot-disconnected"/>
+                    <Label fx:id="midiOutputStatusLabel" text="Saída: desconectada"
+                           maxWidth="Infinity" textOverrun="ELLIPSIS"
+                           HBox.hgrow="ALWAYS" styleClass="midi-connection-label"/>
+                </HBox>
             </HBox>
         </VBox>
     </bottom>

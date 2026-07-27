@@ -24,6 +24,7 @@ import javafx.animation.Interpolator;
 import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.geometry.Orientation;
@@ -105,6 +106,10 @@ public final class MainController {
     private static final int MIDI_CHANNEL_COUNT = 16;
     private static final int MIXER_BANK_SIZE = 8;
     private static final Duration LYRIC_SCROLL_DURATION = Duration.millis(260);
+    private static final double LYRIC_VISIBLE_LINES = 3.0;
+    private static final double LYRIC_FONT_HEIGHT_RATIO = 0.76;
+    private static final double LYRIC_FONT_MIN_SIZE = 36;
+    private static final double LYRIC_FONT_MAX_SIZE = 76;
     private static final String AUTOPLAY_PREFERENCE_KEY = "autoplayEnabled";
     private static final String MIDI_INPUT_PREFERENCE_KEY = "midiInputDevice";
     private static final String MIDI_OUTPUT_PREFERENCE_KEY = "midiOutputDevice";
@@ -135,6 +140,8 @@ public final class MainController {
     private Label durationTimeLabel;
     @FXML
     private Label midiOutputStatusLabel;
+    @FXML
+    private Label midiOutputConnectionDot;
     @FXML
     private Label midiInputConnectionDot;
     @FXML
@@ -1306,8 +1313,12 @@ public final class MainController {
         volumeSlider.setMinorTickCount(1);
         volumeSlider.setShowTickMarks(true);
         volumeSlider.setShowTickLabels(false);
-        volumeSlider.setPrefHeight(150);
-        volumeSlider.setMaxHeight(170);
+        // O fader é o elemento elástico da tira: os rótulos e botões têm tamanho
+        // próprio e ele fica com o que sobrar da altura do mixer. Não há número
+        // fixo a manter em sincronia com o CSS — só um piso para não sumir.
+        volumeSlider.setMinHeight(56);
+        volumeSlider.setMaxHeight(Double.MAX_VALUE);
+        VBox.setVgrow(volumeSlider, Priority.ALWAYS);
         channelVolumeSliders[channel] = volumeSlider;
 
         Label volumeLabel = new Label("100");
@@ -1553,7 +1564,16 @@ public final class MainController {
     }
 
     private void setMidiInputConnected(boolean connected) {
-        List<String> styleClasses = midiInputConnectionDot.getStyleClass();
+        setConnectionDot(midiInputConnectionDot, connected);
+    }
+
+    /** A saída ganhou bolinha própria para formar par com a entrada no rodapé. */
+    private void setMidiOutputConnected(boolean connected) {
+        setConnectionDot(midiOutputConnectionDot, connected);
+    }
+
+    private static void setConnectionDot(Label dot, boolean connected) {
+        List<String> styleClasses = dot.getStyleClass();
         styleClasses.remove("connection-dot-active");
         if (connected) {
             styleClasses.remove("connection-dot-disconnected");
@@ -1916,6 +1936,9 @@ public final class MainController {
         boolean outputConnected = available && engine.hasOutput();
         boolean running = available && engine.isRunning();
 
+        // Um único ponto de verdade: o mesmo estado que libera o transporte acende a bolinha.
+        setMidiOutputConnected(outputConnected);
+
         playButton.setDisable(!loaded || !outputConnected || running);
         pauseButton.setDisable(!running);
         stopButton.setDisable(!loaded);
@@ -2002,6 +2025,30 @@ public final class MainController {
         clip.widthProperty().bind(lyricsViewport.widthProperty());
         clip.heightProperty().bind(lyricsViewport.heightProperty());
         lyricsViewport.setClip(clip);
+
+        // A letra acompanha o tamanho da janela em vez de ficar presa aos 48px
+        // pensados para 1366x768. Em uma tela 1080p ela cresce sozinha, que é o
+        // que importa para quem lê a letra tocando, longe do monitor.
+        for (Label line : new Label[]{stagePreviousLyricLabel, stageCurrentLyricLabel,
+                stageNextLyricLabel, stageIncomingLyricLabel}) {
+            line.styleProperty().bind(Bindings.createStringBinding(
+                    () -> "-fx-font-size: " + Math.round(lyricFontSize()) + "px;",
+                    lyricsViewport.heightProperty()));
+        }
+    }
+
+    /**
+     * Tamanho de fonte da letra em função da altura disponível.
+     *
+     * <p>Três frases ficam visíveis, então cada uma recebe cerca de um terço da área.
+     * O fator 0,76 reproduz os 48px originais na altura de referência (188px), e os
+     * limites impedem que a frase encolha demais ou fique tão grande que quebre em
+     * duas linhas e desmonte o alinhamento.</p>
+     */
+    private double lyricFontSize() {
+        double perLine = lyricsViewport.getHeight() / LYRIC_VISIBLE_LINES;
+        return Math.max(LYRIC_FONT_MIN_SIZE,
+                Math.min(LYRIC_FONT_MAX_SIZE, perLine * LYRIC_FONT_HEIGHT_RATIO));
     }
 
     private void animateLyricsForward(int lyricIndex) {
