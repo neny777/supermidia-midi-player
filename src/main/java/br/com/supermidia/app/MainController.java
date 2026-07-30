@@ -15,6 +15,7 @@ import br.com.supermidia.midi.MidiMappingSession;
 import br.com.supermidia.midi.MidiOutputDevice;
 import br.com.supermidia.midi.MidiPlaybackEngine;
 import br.com.supermidia.midi.SmcMixerLayout;
+import br.com.supermidia.midi.SynthResetMode;
 import br.com.supermidia.mixer.MidiChannelInfo;
 import br.com.supermidia.mixer.MidiSongAnalysis;
 import br.com.supermidia.playlist.PlaylistFileService;
@@ -35,6 +36,7 @@ import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -117,6 +119,8 @@ public final class MainController {
     private static final String MIDI_INPUT_PREFERENCE_KEY = "midiInputDevice";
     private static final String MIDI_OUTPUT_PREFERENCE_KEY = "midiOutputDevice";
     private static final String MIDI_BINDING_PREFERENCE_PREFIX = "midiBinding.";
+    private static final String SYNTH_RESET_MODE_PREFERENCE_KEY = "synthResetMode";
+    private static final String BLOCK_VENDOR_SYSEX_PREFERENCE_KEY = "blockVendorSysex";
     private static final long MIDI_INPUT_ACTIVITY_TIMEOUT_NANOS = 350_000_000L;
     private static final long MIDI_LEARN_RELEASE_TIMEOUT_NANOS = 400_000_000L;
     private static final long MAPPING_COOLDOWN_NANOS = 700_000_000L;
@@ -140,6 +144,10 @@ public final class MainController {
     private Label currentTimeLabel;
     @FXML
     private Label durationTimeLabel;
+    @FXML
+    private ComboBox<SynthResetMode> synthResetModeComboBox;
+    @FXML
+    private CheckBox blockVendorSysexCheckBox;
     @FXML
     private Label midiOutputStatusLabel;
     @FXML
@@ -315,6 +323,8 @@ public final class MainController {
             engine.setMasterVolume(masterVolumeSlider.getValue() / 100.0);
             engine.setPlaybackFinishedHandler(
                     () -> Platform.runLater(this::handlePlaybackFinished));
+            // Antes de conectar a saída: o receiver nasce já com a política escolhida.
+            configureSynthCompatibility();
             refreshMidiOutputs();
         } catch (MidiUnavailableException exception) {
             statusLabel.setText("MIDI INDISPONÍVEL");
@@ -568,6 +578,59 @@ public final class MainController {
     private void handleNext() {
         if (playlist.hasNext()) {
             loadPlaylistIndex(playlist.currentIndex() + 1);
+        }
+    }
+
+    /**
+     * Prepara os controles de compatibilidade e aplica o que ficou salvo.
+     *
+     * <p>Qual reset funciona depende do aparelho e do repertório — só quem tem o
+     * equipamento consegue descobrir, testando. O padrão não envia reset algum, deixando
+     * a inicialização para o arquivo, que é o comportamento que serve à maioria.</p>
+     */
+    private void configureSynthCompatibility() {
+        synthResetModeComboBox.setItems(
+                FXCollections.observableArrayList(SynthResetMode.values()));
+        SynthResetMode savedMode = SynthResetMode.fromName(
+                loadPreference(SYNTH_RESET_MODE_PREFERENCE_KEY), SynthResetMode.NONE);
+        synthResetModeComboBox.getSelectionModel().select(savedMode);
+
+        boolean block = true;
+        try {
+            block = preferences.getBoolean(BLOCK_VENDOR_SYSEX_PREFERENCE_KEY, true);
+        } catch (SecurityException ignored) {
+            // A preferência é opcional; o player funciona sem persistência.
+        }
+        blockVendorSysexCheckBox.setSelected(block);
+
+        if (engine != null) {
+            engine.setResetMode(savedMode);
+            engine.setBlockVendorSysex(block);
+        }
+    }
+
+    @FXML
+    private void handleSynthResetModeSelection() {
+        SynthResetMode mode = synthResetModeComboBox.getValue();
+        if (mode == null) {
+            return;
+        }
+        if (engine != null) {
+            engine.setResetMode(mode);
+        }
+        savePreference(SYNTH_RESET_MODE_PREFERENCE_KEY, mode.name());
+    }
+
+    @FXML
+    private void handleBlockVendorSysexToggle() {
+        boolean block = blockVendorSysexCheckBox.isSelected();
+        if (engine != null) {
+            engine.setBlockVendorSysex(block);
+        }
+        try {
+            preferences.putBoolean(BLOCK_VENDOR_SYSEX_PREFERENCE_KEY, block);
+        } catch (SecurityException ignored) {
+            // A preferência é opcional; o player funciona sem persistência.
         }
     }
 

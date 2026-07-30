@@ -12,19 +12,24 @@ public final class MidiTransformReceiver implements Receiver {
     private static final int MIDI_CHANNELS = 16;
     private static final int MIDI_NOTES = 128;
     private static final int PERCUSSION_CHANNEL = 9;
-    private static final int BANK_SELECT_MSB = 0;
     private static final int CHANNEL_VOLUME = 7;
-    private static final int BANK_SELECT_LSB = 32;
     private static final int ALL_SOUND_OFF = 120;
-    private static final int RESET_ALL_CONTROLLERS = 121;
     private static final int ALL_NOTES_OFF = 123;
 
     /**
-     * "GM System On": devolve o dispositivo ao padrão General MIDI — programas em 0,
-     * controladores zerados e, sobretudo, o canal 10 de volta a percussão.
+     * Pausa após o reset, antes de liberar a próxima música.
+     *
+     * <p>Um módulo externo leva dezenas de milissegundos reinicializando e ignora o que
+     * chega nesse intervalo. Sem a pausa, o reset e os Program Changes do início do
+     * arquivo seguinte caem os dois nesse buraco, e o aparelho continua com os
+     * instrumentos da música anterior.</p>
+     *
+     * <p>Foi assim que o defeito se manifestou: reiniciar o programa corrigia, porque
+     * entre conectar a saída e escolher uma música passavam-se segundos; trocar de
+     * música não, porque tudo acontecia em milissegundos. Sintetizadores por software
+     * não sofrem disso, e por isso o mesmo arquivo soava certo no Gervill.</p>
      */
-    private static final byte[] GM_SYSTEM_ON =
-            {(byte) 0xF0, 0x7E, 0x7F, 0x09, 0x01, (byte) 0xF7};
+    private static final long RESET_SETTLE_MILLIS = 150;
 
     private final Receiver delegate;
     private final int[][] activeOutputNotes = new int[MIDI_CHANNELS][MIDI_NOTES];
@@ -37,6 +42,16 @@ public final class MidiTransformReceiver implements Receiver {
     private int transpose;
     private double masterVolume = 1.0;
     private boolean closed;
+    /**
+     * Barra por padrão o SysEx de fabricante que vem no arquivo.
+     *
+     * <p>A assimetria decide: quem tem o aparelho da marca do arquivo perde apenas
+     * ajustes de efeito ao barrá-lo, enquanto quem tem aparelho de outra marca perde o
+     * som por completo ao deixá-lo passar. Repertório circula entre marcas — arquivos
+     * feitos para Yamaha carregam XG Reset e parâmetros XG — então o padrão protege o
+     * caso grave, e quem quiser o SysEx pode liberá-lo em Configurações.</p>
+     */
+    private boolean blockVendorSysex = true;
 
     public MidiTransformReceiver(Receiver delegate) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
@@ -53,6 +68,9 @@ public final class MidiTransformReceiver implements Receiver {
             return;
         }
         if (!(message instanceof ShortMessage shortMessage)) {
+            if (blockVendorSysex && isVendorSpecificSysex(message)) {
+                return;
+            }
             delegate.send(message, timeStamp);
             return;
         }
@@ -81,6 +99,42 @@ public final class MidiTransformReceiver implements Receiver {
         }
 
         delegate.send(message, timeStamp);
+    }
+
+    /**
+     * Define se SysEx específico de fabricante, vindo do arquivo, chega ao sintetizador.
+     *
+     * <p>Bloquear é o padrão porque o repertório circula entre marcas: arquivos feitos
+     * para Yamaha carregam XG Reset e parâmetros de efeito XG, e mandá-los a um módulo
+     * Roland deixa canais mudos por um bom tempo. O mesmo valeria ao contrário, com GS
+     * num Yamaha. Quem tem o aparelho da marca certa pode liberar.</p>
+     */
+    public synchronized void setBlockVendorSysex(boolean block) {
+        blockVendorSysex = block;
+    }
+
+    public synchronized boolean isBlockingVendorSysex() {
+        return blockVendorSysex;
+    }
+
+    /**
+     * Diz se a mensagem é SysEx de fabricante, e não uma mensagem universal.
+     *
+     * <p>Os IDs {@code 7E} (não em tempo real) e {@code 7F} (tempo real) são universais —
+     * é neles que vive o GM System On, que todo aparelho entende. Qualquer outro ID é de
+     * um fabricante: {@code 43} Yamaha, {@code 41} Roland, {@code 44} Casio, e assim por
+     * diante. Só esses são barrados.</p>
+     */
+    private static boolean isVendorSpecificSysex(MidiMessage message) {
+        if (!(message instanceof SysexMessage sysex)) {
+            return false;
+        }
+        byte[] data = sysex.getData();
+        if (data.length == 0) {
+            return false;
+        }
+        int manufacturer = data[0] & 0xFF;
+        return manufacturer != 0x7E && manufacturer != 0x7F;
     }
 
     public synchronized void setTranspose(int semitones) {
@@ -161,23 +215,45 @@ public final class MidiTransformReceiver implements Receiver {
      * mensagens comuns — alguns dispositivos ignoram SysEx, e o custo de repetir
      * entre duas músicas é irrelevante.</p>
      */
-    public synchronized void resetInstruments() {
+    /**
+     * Reinicializa o sintetizador antes de carregar outra música.
+     *
+     * <p>Envia uma única mensagem — o reset do modo escolhido — e aguarda o aparelho
+     * digeri-la. Não dispara mensagens por canal: uma rajada de dezenas delas sobrecarrega
+     * o buffer de entrada de módulos de hardware, que passam a descartar a configuração da
+     * música seguinte.</p>
+     */
+    public synchronized void resetInstruments(SynthResetMode mode) {
         if (closed) {
             return;
         }
-        try {
-            delegate.send(new SysexMessage(GM_SYSTEM_ON, GM_SYSTEM_ON.length), -1);
-        } catch (InvalidMidiDataException exception) {
-            throw new IllegalStateException("SysEx de GM System On inválido", exception);
-        }
         for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
-            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, ALL_SOUND_OFF, 0, -1);
-            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, ALL_NOTES_OFF, 0, -1);
-            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, RESET_ALL_CONTROLLERS, 0, -1);
-            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, BANK_SELECT_MSB, 0, -1);
-            sendShortMessage(ShortMessage.CONTROL_CHANGE, channel, BANK_SELECT_LSB, 0, -1);
-            sendShortMessage(ShortMessage.PROGRAM_CHANGE, channel, 0, 0, -1);
             Arrays.fill(activeOutputNotes[channel], -1);
+        }
+        if (!mode.hasSysex()) {
+            return;
+        }
+        try {
+            byte[] sysex = mode.sysex();
+            delegate.send(new SysexMessage(sysex, sysex.length), -1);
+        } catch (InvalidMidiDataException exception) {
+            throw new IllegalStateException(
+                    "SysEx de reset inválido no modo " + mode.name(), exception);
+        }
+        settleAfterReset();
+    }
+
+    /**
+     * Segura a linha até o sintetizador concluir o reset.
+     *
+     * <p>Roda entre duas músicas, nunca durante a reprodução, então a pausa não
+     * interrompe nada que esteja soando.</p>
+     */
+    private void settleAfterReset() {
+        try {
+            Thread.sleep(RESET_SETTLE_MILLIS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
         }
     }
 

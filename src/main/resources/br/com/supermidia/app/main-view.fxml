@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.CustomMenuItem?>
 <?import javafx.scene.control.Label?>
@@ -223,6 +224,20 @@
                         <Button text="Atualizar" onAction="#handleRefreshMidiOutputs"
                                 styleClass="secondary-button"/>
                     </HBox>
+                    <Label text="Compatibilidade do sintetizador" styleClass="settings-subtitle"/>
+                    <Label text="Ajuste só se o som sair errado num módulo externo. Muitos arquivos já se inicializam sozinhos, e nesse caso o reset do player atropela o do arquivo."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <Label text="Reset a cada música" styleClass="muted-label"/>
+                        <ComboBox fx:id="synthResetModeComboBox"
+                                  onAction="#handleSynthResetModeSelection"
+                                  styleClass="device-combo" HBox.hgrow="ALWAYS"
+                                  maxWidth="Infinity"/>
+                    </HBox>
+                    <CheckBox fx:id="blockVendorSysexCheckBox"
+                              onAction="#handleBlockVendorSysexToggle"
+                              text="Barrar SysEx de outros fabricantes (Yamaha XG, Roland GS) contido no arquivo"
+                              wrapText="true"/>
                 </VBox>
 
                 <VBox spacing="14" styleClass="settings-card">

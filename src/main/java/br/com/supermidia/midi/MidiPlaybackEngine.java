@@ -31,6 +31,8 @@ public final class MidiPlaybackEngine implements AutoCloseable {
     private MidiTransformReceiver transformReceiver;
     private File loadedFile;
     private float tempoFactor = 1.0f;
+    private SynthResetMode resetMode = SynthResetMode.NONE;
+    private boolean blockVendorSysex = true;
     private int transpose;
     private double masterVolume = 0.8;
     private Runnable playbackFinishedHandler = () -> { };
@@ -80,6 +82,7 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         try {
             Receiver receiver = selectedDevice.getReceiver();
             MidiTransformReceiver transformed = new MidiTransformReceiver(receiver);
+            transformed.setBlockVendorSysex(blockVendorSysex);
             transformed.setTranspose(transpose);
             transformed.setMasterVolume(masterVolume);
             transformed.resetMixer(channelSourceVolumes);
@@ -104,10 +107,11 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         Objects.requireNonNull(file, "file");
         Sequence sequence = MidiSystem.getSequence(file);
         stop();
-        // Limpa o que a música anterior deixou no sintetizador — instrumentos, bancos
-        // e controladores. A mixagem é reaplicada em seguida, por resetChannelMix.
+        // Reinicializa o sintetizador conforme o modo escolhido em Configurações. Alguns
+        // aparelhos precisam do reset para não herdar os instrumentos da música anterior;
+        // outros tocam melhor sem ele, porque o próprio arquivo se inicializa.
         if (transformReceiver != null) {
-            transformReceiver.resetInstruments();
+            transformReceiver.resetInstruments(resetMode);
         }
         sequencer.setSequence(sequence);
         sequencer.setTempoFactor(tempoFactor);
@@ -164,6 +168,27 @@ public final class MidiPlaybackEngine implements AutoCloseable {
     public synchronized void setTempoFactor(float factor) {
         tempoFactor = Math.max(0.25f, Math.min(4.0f, factor));
         sequencer.setTempoFactor(tempoFactor);
+    }
+
+    /** Qual reset enviar ao sintetizador ao carregar cada música. */
+    public synchronized void setResetMode(SynthResetMode mode) {
+        resetMode = Objects.requireNonNull(mode, "mode");
+    }
+
+    public synchronized SynthResetMode getResetMode() {
+        return resetMode;
+    }
+
+    /** Se o SysEx de fabricante contido no arquivo deve ser barrado antes da saída. */
+    public synchronized void setBlockVendorSysex(boolean block) {
+        blockVendorSysex = block;
+        if (transformReceiver != null) {
+            transformReceiver.setBlockVendorSysex(block);
+        }
+    }
+
+    public synchronized boolean isBlockingVendorSysex() {
+        return blockVendorSysex;
     }
 
     public synchronized void setTranspose(int semitones) {

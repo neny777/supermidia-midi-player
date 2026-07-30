@@ -352,6 +352,15 @@
     -fx-padding: 12 2 0 2;
 }
 
+/* Subtítulo dentro de um cartão, para agrupar ajustes secundários sem criar
+   um cartão novo — caso da compatibilidade de sintetizador na Saída MIDI. */
+.settings-subtitle {
+    -fx-text-fill: #e2e7ee;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-padding: 6 0 0 0;
+}
+
 .settings-title {
     -fx-text-fill: #f1f4f8;
     -fx-font-size: 17px;
