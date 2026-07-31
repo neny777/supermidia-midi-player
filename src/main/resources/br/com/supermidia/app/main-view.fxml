@@ -128,12 +128,12 @@
             <VBox fx:id="presentationView" alignment="CENTER" spacing="12"
                   maxWidth="1900" maxHeight="Infinity"
                   styleClass="content-area">
-                <VBox alignment="CENTER" spacing="8" maxHeight="Infinity"
+                <VBox fx:id="lyricsCard" alignment="CENTER" spacing="8" maxHeight="Infinity"
                       VBox.vgrow="ALWAYS" styleClass="lyrics-card">
                     <Label fx:id="stageLyricsStatusLabel" text="LETRA SINCRONIZADA"
                            visible="false" managed="false"/>
                     <StackPane fx:id="lyricsViewport" maxWidth="Infinity"
-                               VBox.vgrow="ALWAYS" styleClass="lyrics-viewport">
+                               styleClass="lyrics-viewport">
                         <VBox fx:id="lyricsLinesContainer" alignment="TOP_CENTER" spacing="4"
                               maxWidth="Infinity" StackPane.alignment="TOP_CENTER">
                             <Label fx:id="stagePreviousLyricLabel" text="" styleClass="lyrics-line"

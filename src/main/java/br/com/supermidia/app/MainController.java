@@ -112,7 +112,13 @@ public final class MainController {
     private static final int MIXER_BANK_SIZE = 8;
     private static final Duration LYRIC_SCROLL_DURATION = Duration.millis(260);
     private static final double LYRIC_VISIBLE_LINES = 3.0;
-    private static final double LYRIC_FONT_HEIGHT_RATIO = 0.76;
+    /** Fração da faixa de cada frase ocupada pela fonte; 0,68 reproduz os 48px de origem. */
+    private static final double LYRIC_FONT_HEIGHT_RATIO = 0.68;
+    /** Altura que uma frase ocupa em relação ao corpo da fonte, incluindo entrelinha. */
+    private static final double LYRIC_LINE_HEIGHT_FACTOR = 1.28;
+    private static final double LYRIC_LINE_SPACING = 4;
+    /** Padding vertical de {@code .lyrics-card}: 14 acima e 14 abaixo. */
+    private static final double LYRIC_CARD_VERTICAL_PADDING = 28;
     private static final double LYRIC_FONT_MIN_SIZE = 36;
     private static final double LYRIC_FONT_MAX_SIZE = 76;
     private static final String AUTOPLAY_PREFERENCE_KEY = "autoplayEnabled";
@@ -247,6 +253,8 @@ public final class MainController {
     private VBox playlistView;
     @FXML
     private VBox settingsView;
+    @FXML
+    private VBox lyricsCard;
     @FXML
     private StackPane lyricsViewport;
     @FXML
@@ -2171,29 +2179,45 @@ public final class MainController {
         clip.heightProperty().bind(lyricsViewport.heightProperty());
         lyricsViewport.setClip(clip);
 
-        // A letra acompanha o tamanho da janela em vez de ficar presa aos 48px
-        // pensados para 1366x768. Em uma tela 1080p ela cresce sozinha, que é o
-        // que importa para quem lê a letra tocando, longe do monitor.
+        // A letra acompanha o tamanho da janela em vez de ficar presa aos 48px pensados
+        // para 1366x768. A referência agora é a altura do CARTÃO, não da janela de frases:
+        // esta última passou a ser calculada a partir da fonte, e usar uma como base da
+        // outra criaria dependência circular.
         for (Label line : new Label[]{stagePreviousLyricLabel, stageCurrentLyricLabel,
                 stageNextLyricLabel, stageIncomingLyricLabel}) {
             line.styleProperty().bind(Bindings.createStringBinding(
                     () -> "-fx-font-size: " + Math.round(lyricFontSize()) + "px;",
-                    lyricsViewport.heightProperty()));
+                    lyricsCard.heightProperty()));
         }
+
+        // A janela recebe a altura exata de três frases, e o cartão a centraliza.
+        // Antes ela preenchia o cartão inteiro com o bloco preso no topo, de modo que
+        // toda a sobra vertical se acumulava abaixo da última frase — bem visível em
+        // tela cheia, onde a letra ficava no terço de cima e o resto vazio.
+        lyricsViewport.prefHeightProperty().bind(Bindings.createDoubleBinding(
+                this::lyricViewportHeight, lyricsCard.heightProperty()));
+        lyricsViewport.minHeightProperty().bind(lyricsViewport.prefHeightProperty());
+        lyricsViewport.maxHeightProperty().bind(lyricsViewport.prefHeightProperty());
     }
 
     /**
-     * Tamanho de fonte da letra em função da altura disponível.
+     * Tamanho de fonte da letra em função do espaço livre no cartão.
      *
-     * <p>Três frases ficam visíveis, então cada uma recebe cerca de um terço da área.
-     * O fator 0,76 reproduz os 48px originais na altura de referência (188px), e os
-     * limites impedem que a frase encolha demais ou fique tão grande que quebre em
-     * duas linhas e desmonte o alinhamento.</p>
+     * <p>Três frases ficam visíveis, então cada uma recebe cerca de um terço da altura
+     * útil. Os limites impedem que a frase encolha demais ou fique tão grande que quebre
+     * em duas linhas e desmonte o alinhamento de três.</p>
      */
     private double lyricFontSize() {
-        double perLine = lyricsViewport.getHeight() / LYRIC_VISIBLE_LINES;
+        double usableHeight = lyricsCard.getHeight() - LYRIC_CARD_VERTICAL_PADDING;
+        double perLine = usableHeight / LYRIC_VISIBLE_LINES;
         return Math.max(LYRIC_FONT_MIN_SIZE,
                 Math.min(LYRIC_FONT_MAX_SIZE, perLine * LYRIC_FONT_HEIGHT_RATIO));
+    }
+
+    /** Altura de exatamente três frases na fonte atual, mais as entrelinhas. */
+    private double lyricViewportHeight() {
+        return LYRIC_VISIBLE_LINES * lyricFontSize() * LYRIC_LINE_HEIGHT_FACTOR
+                + (LYRIC_VISIBLE_LINES - 1) * LYRIC_LINE_SPACING;
     }
 
     private void animateLyricsForward(int lyricIndex) {

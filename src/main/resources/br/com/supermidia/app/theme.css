@@ -181,9 +181,8 @@
     -fx-alignment: CENTER;
 }
 
-.lyrics-viewport {
-    -fx-min-height: 188px;
-}
+/* A altura da janela de frases é calculada no MainController, a partir do tamanho
+   de fonte em vigor, e não pode ser fixada aqui: a propriedade está vinculada. */
 
 /* Sem altura fixa: cada frase acompanha o próprio tamanho de fonte, que o
    MainController ajusta conforme a altura disponível. O 48px aqui é só o
