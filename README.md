@@ -34,7 +34,7 @@ O pacote Linux deve ser gerado em uma máquina Linux. Na máquina de desenvolvim
 Para obter o projeto no Linux:
 
 ```bash
-git clone --branch rewrite-javafx https://github.com/neny777/supermidia-midi-player.git
+git clone https://github.com/neny777/supermidia-midi-player.git
 cd supermidia-midi-player
 ```
 

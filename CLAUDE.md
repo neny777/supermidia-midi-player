@@ -11,7 +11,7 @@ Responda e escreva comentários, mensagens de commit e texto de interface em **p
 - Projeto modular: `module-info.java` em `src/main/java`
 - Empacotamento com `jpackage` (scripts `package-*.bat` e `package-ubuntu.sh`)
 - Desenvolvimento no Windows; o pacote Linux precisa ser gerado em uma máquina Linux
-- Repositório: https://github.com/neny777/supermidia-midi-player (branch `rewrite-javafx`)
+- Repositório: https://github.com/neny777/supermidia-midi-player (branch `main`)
 
 ```powershell
 .\gradlew.bat test     # testes
