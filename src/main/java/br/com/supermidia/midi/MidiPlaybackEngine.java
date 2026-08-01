@@ -244,6 +244,17 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         }
     }
 
+    /**
+     * Notas soando agora, sem a percussão, para a visualização do piano.
+     *
+     * <p>Sem saída conectada não há o que mostrar, e o vetor volta todo em falso.</p>
+     */
+    public synchronized boolean[] soundingNotes() {
+        return transformReceiver == null
+                ? new boolean[128]
+                : transformReceiver.soundingNotes(false);
+    }
+
     public synchronized boolean isChannelActive(int channel) {
         requireChannel(channel);
         return transformReceiver != null && transformReceiver.isChannelActive(channel, 220);

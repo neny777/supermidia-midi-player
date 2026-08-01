@@ -15,6 +15,7 @@ import br.com.supermidia.midi.MidiMappingSession;
 import br.com.supermidia.midi.MidiOutputDevice;
 import br.com.supermidia.midi.MidiPlaybackEngine;
 import br.com.supermidia.midi.SmcMixerLayout;
+import br.com.supermidia.midi.SoundingNoteNames;
 import br.com.supermidia.midi.SynthResetMode;
 import br.com.supermidia.mixer.MidiChannelInfo;
 import br.com.supermidia.mixer.MidiSongAnalysis;
@@ -51,10 +52,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.Scene;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.FileChooser;
-import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import javax.sound.midi.InvalidMidiDataException;
@@ -111,6 +110,13 @@ public final class MainController {
     private static final int MIDI_CHANNEL_COUNT = 16;
     private static final int MIXER_BANK_SIZE = 8;
     private static final Duration LYRIC_SCROLL_DURATION = Duration.millis(260);
+    /**
+     * Intervalo de atualização do piano.
+     *
+     * <p>Mais curto que os 150 ms do restante da interface: acordes trocam a cada tempo,
+     * e um atraso perceptível entre o som e a tecla acesa atrapalharia a leitura.</p>
+     */
+    private static final double PIANO_REFRESH_MILLIS = 60;
     private static final double LYRIC_VISIBLE_LINES = 3.0;
     /** Fração da faixa de cada frase ocupada pela fonte; 0,68 reproduz os 48px de origem. */
     private static final double LYRIC_FONT_HEIGHT_RATIO = 0.68;
@@ -179,7 +185,13 @@ public final class MainController {
     @FXML
     private Label playlistCountLabel;
     @FXML
-    private Label chordValueLabel;
+    private VBox pianoView;
+    @FXML
+    private ToggleButton pianoNavButton;
+    @FXML
+    private VBox pianoKeyboardHolder;
+    @FXML
+    private Label soundingNotesLabel;
 
     @FXML
     private ComboBox<MidiOutputDevice> midiOutputComboBox;
@@ -310,7 +322,8 @@ public final class MainController {
             ControllerPickup.array(MIXER_BANK_SIZE);
     /** Pickup dos controles contínuos globais: tom, velocidade e volume geral. */
     private final Map<Slider, ControllerPickup> globalPickups = new HashMap<>();
-    private Stage pianoStage;
+    private PianoKeyboard pianoKeyboard;
+    private Timeline pianoTimeline;
 
     @FXML
     private void initialize() {
@@ -319,6 +332,7 @@ public final class MainController {
         configureMixerView();
         configureMidiLearn();
         configureLyricsViewport();
+        configurePianoView();
         setLyricLabels("", "", "");
         playbackMode = loadPlaybackModePreference();
         refreshPlaybackMode();
@@ -375,54 +389,76 @@ public final class MainController {
 
     @FXML
     private void handleShowPlaylist() {
-        presentationView.setVisible(false);
-        presentationView.setManaged(false);
-        settingsView.setVisible(false);
-        settingsView.setManaged(false);
-        playlistView.setVisible(true);
-        playlistView.setManaged(true);
-        playlistNavButton.setSelected(true);
+        showView(playlistView, playlistNavButton);
     }
 
     @FXML
     private void handleShowSettings() {
-        presentationView.setVisible(false);
-        presentationView.setManaged(false);
-        playlistView.setVisible(false);
-        playlistView.setManaged(false);
-        settingsView.setVisible(true);
-        settingsView.setManaged(true);
-        settingsNavButton.setSelected(true);
+        showView(settingsView, settingsNavButton);
     }
 
     @FXML
-    private void handleOpenPiano() {
-        if (pianoStage == null) {
-            Label title = new Label("Piano");
-            title.getStyleClass().add("page-title");
-            Label message = new Label(
-                    "A visualização das notas ativas será adicionada na próxima etapa.");
-            message.getStyleClass().add("muted-label");
-            message.setWrapText(true);
+    private void handleShowPiano() {
+        showView(pianoView, pianoNavButton);
+    }
 
-            VBox content = new VBox(12, title, message);
-            content.setAlignment(Pos.CENTER);
-            content.getStyleClass().addAll("app-shell", "piano-placeholder");
-
-            Scene scene = new Scene(content, 760, 260);
-            scene.getStylesheets().add(
-                    getClass().getResource("theme.css").toExternalForm());
-
-            pianoStage = new Stage();
-            pianoStage.setTitle("Piano — SuperMídia MIDI Player");
-            pianoStage.initOwner(currentSongLabel.getScene().getWindow());
-            pianoStage.setScene(scene);
-            pianoStage.setMinWidth(520);
-            pianoStage.setMinHeight(220);
-            pianoStage.setOnHidden(ignored -> pianoStage = null);
+    /**
+     * Deixa visível apenas a tela pedida.
+     *
+     * <p>Cada tela costumava esconder as demais por conta própria, o que obrigava a
+     * editar todos os métodos ao acrescentar uma — e esquecer um deles deixaria duas
+     * telas sobrepostas. Aqui a lista está num lugar só.</p>
+     */
+    private void showView(VBox view, ToggleButton navButton) {
+        for (VBox candidate : new VBox[]{presentationView, playlistView, settingsView, pianoView}) {
+            boolean selected = candidate == view;
+            candidate.setVisible(selected);
+            candidate.setManaged(selected);
         }
-        pianoStage.show();
-        pianoStage.toFront();
+        navButton.setSelected(true);
+        // O piano só é atualizado enquanto está à vista: fora dela seria trabalho jogado fora.
+        refreshPianoTimelineState();
+    }
+
+    @FXML
+    private void configurePianoView() {
+        pianoKeyboard = new PianoKeyboard();
+        // O Canvas se declara redimensionável e recebe a medida pelo layout, em resize().
+        // Vincular width/height aqui brigaria com isso: propriedade vinculada não aceita
+        // atribuição, e o próprio layout derrubaria a aplicação ao tentar dimensioná-lo.
+        VBox.setVgrow(pianoKeyboard, Priority.ALWAYS);
+        pianoKeyboardHolder.getChildren().add(pianoKeyboard);
+
+        // O contêiner se limita à altura que o teclado precisa naquela largura. Sem o
+        // teto ele tomaria toda a altura disponível e o teclado, desenhado na proporção
+        // certa de uma tecla real, apareceria cercado de vazio.
+        pianoKeyboardHolder.maxHeightProperty().bind(Bindings.createDoubleBinding(
+                () -> PianoKeyboard.idealHeightFor(pianoKeyboardHolder.getWidth()),
+                pianoKeyboardHolder.widthProperty()));
+
+        pianoTimeline = new Timeline(new KeyFrame(
+                Duration.millis(PIANO_REFRESH_MILLIS), ignored -> refreshPiano()));
+        pianoTimeline.setCycleCount(Timeline.INDEFINITE);
+    }
+
+    /** Mantém o piano atualizado só enquanto a tela dele está à vista. */
+    private void refreshPianoTimelineState() {
+        if (pianoTimeline == null) {
+            return;
+        }
+        if (pianoView.isVisible()) {
+            refreshPiano();
+            pianoTimeline.play();
+        } else {
+            pianoTimeline.stop();
+        }
+    }
+
+    private void refreshPiano() {
+        boolean[] sounding = engine == null ? new boolean[128] : engine.soundingNotes();
+        pianoKeyboard.setSoundingNotes(sounding);
+        String names = SoundingNoteNames.format(sounding);
+        soundingNotesLabel.setText(names.isEmpty() ? "—" : names);
     }
 
     @FXML
@@ -2116,13 +2152,7 @@ public final class MainController {
     }
 
     private void showPresentation() {
-        playlistView.setVisible(false);
-        playlistView.setManaged(false);
-        settingsView.setVisible(false);
-        settingsView.setManaged(false);
-        presentationView.setVisible(true);
-        presentationView.setManaged(true);
-        presentationNavButton.setSelected(true);
+        showView(presentationView, presentationNavButton);
     }
 
     private void loadLyrics(PlaylistItem item) {

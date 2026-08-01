@@ -101,11 +101,36 @@ ao vivo sem usar o knob contínuo de tom).
   assistente sempre aprende contínuos como `ABSOLUTE`. Se os encoders forem relativos,
   usar a sugestão do diagnóstico.
 - **Letras em segundo monitor** — janela separada, com posição, tamanho e monitor persistidos.
-- **Piano** — visualização das notas ativas na janela já existente (hoje é um marcador).
-- **Acordes** — análise com filtragem do canal de bateria, estabilidade contra notas de
-  passagem e consideração do transpose.
-- **Prévia** — reprodução de N segundos de cada MIDI, com fade na troca.
 - **Perfis de mixagem por música**.
+
+### Abandonados
+
+- **Acordes** — o reconhecimento automático foi descartado. As mesmas notas nomeiam
+  acordes diferentes conforme o contexto (Am7 ou C6), e sem tonalidade não há como
+  escolher entre uma altura e sua enarmonia. Em vez de nomear com margem de erro, a
+  tela do piano mostra o que soa e quem lê decide.
+- **Prévia** — descartada. O controle e o bloco `ACORDE` do rodapé foram removidos
+  da interface.
+
+## Tela do piano
+
+Aba de navegação, ao lado de Ao vivo, Playlist e Configurações — não é janela separada.
+Serve para identificar harmonia em ensaio, não para tocar: não responde a cliques.
+
+A fonte de dados é `MidiTransformReceiver.soundingNotes(boolean)`, que lê o
+`activeOutputNotes` já mantido para o Note Off. Duas propriedades vêm de graça daí, e
+há teste para ambas: as alturas são as de **saída**, portanto com transpose aplicado, e
+canais em mute **não constam**, porque suas notas nunca chegam a ser registradas.
+
+| Classe | Papel |
+|---|---|
+| `SoundingNoteNames` | Lista as alturas soando, do grave para o agudo — o baixo primeiro, que é o que distingue C de C/E |
+| `PianoKeyboard` | 88 teclas em `Canvas`, na proporção real (tecla branca 1:6) |
+
+`PianoKeyboard` é um `Canvas` redimensionável, e isso tem duas armadilhas que já
+custaram falhas em execução: **não vincule** `width`/`height` (o layout chama `resize()`,
+que atribui a elas) e **sobrescreva `maxWidth`/`maxHeight`** devolvendo valor ilimitado,
+senão o contêiner conclui que o Canvas quer tamanho zero e nada aparece.
 
 Ver `BACKLOG.md` para a direção visual aprovada.
 

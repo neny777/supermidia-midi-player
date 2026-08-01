@@ -257,6 +257,59 @@ class MidiTransformReceiverTest {
                 output.message(0).getMessage());
     }
 
+    @Test
+    void soundingNotesReportsTheTransposedPitchNotTheOneInTheFile()
+            throws InvalidMidiDataException {
+        MidiTransformReceiver receiver = new MidiTransformReceiver(new RecordingReceiver());
+        receiver.setTranspose(3);
+
+        receiver.send(message(ShortMessage.NOTE_ON, 0, 60, 100), -1);
+
+        // O piano precisa mostrar o que o ouvinte escuta. Com transpose de 3 semitons,
+        // a nota 60 do arquivo soa como 63 — é essa que deve acender na tela.
+        boolean[] sounding = receiver.soundingNotes(false);
+        assertTrue(sounding[63], "deveria acusar a altura de saída");
+        assertFalse(sounding[60], "não deveria acusar a altura do arquivo");
+    }
+
+    @Test
+    void soundingNotesIgnoresPercussionWhenAskedTo() throws InvalidMidiDataException {
+        MidiTransformReceiver receiver = new MidiTransformReceiver(new RecordingReceiver());
+
+        receiver.send(message(ShortMessage.NOTE_ON, 9, 36, 100), -1);
+        receiver.send(message(ShortMessage.NOTE_ON, 0, 60, 100), -1);
+
+        // Para leitura de harmonia a bateria é ruído: acende o teclado inteiro sem
+        // dizer nada sobre o acorde.
+        assertFalse(receiver.soundingNotes(false)[36], "percussão fora");
+        assertTrue(receiver.soundingNotes(false)[60], "harmonia dentro");
+        assertTrue(receiver.soundingNotes(true)[36], "percussão entra quando pedida");
+    }
+
+    @Test
+    void soundingNotesOmitsMutedChannelsBecauseTheyAreNotHeard()
+            throws InvalidMidiDataException {
+        MidiTransformReceiver receiver = new MidiTransformReceiver(new RecordingReceiver());
+        receiver.setChannelMuted(0, true);
+
+        receiver.send(message(ShortMessage.NOTE_ON, 0, 60, 100), -1);
+        receiver.send(message(ShortMessage.NOTE_ON, 1, 64, 100), -1);
+
+        assertFalse(receiver.soundingNotes(false)[60], "canal em mute não soa, não acende");
+        assertTrue(receiver.soundingNotes(false)[64]);
+    }
+
+    @Test
+    void soundingNotesClearsWhenTheNoteEnds() throws InvalidMidiDataException {
+        MidiTransformReceiver receiver = new MidiTransformReceiver(new RecordingReceiver());
+
+        receiver.send(message(ShortMessage.NOTE_ON, 0, 60, 100), -1);
+        assertTrue(receiver.soundingNotes(false)[60]);
+
+        receiver.send(message(ShortMessage.NOTE_OFF, 0, 60, 0), -1);
+        assertFalse(receiver.soundingNotes(false)[60], "nota apagada após o Note Off");
+    }
+
     private static SysexMessage sysex(int... bytes) throws InvalidMidiDataException {
         byte[] data = new byte[bytes.length];
         for (int index = 0; index < bytes.length; index++) {

@@ -118,6 +118,8 @@ O player já permite:
 - avançar manual ou automaticamente na playlist;
 - extrair e acompanhar letras incorporadas no MIDI ou KAR;
 - analisar e exibir os 16 canais e instrumentos GM;
+- ver as notas em execução num teclado de 88 teclas, com a lista das alturas soando;
+- barrar o SysEx de outro fabricante contido no arquivo, que emudece módulos externos;
 - associar qualquer botão, fader ou encoder a uma função por MIDI Learn;
 - mapear a controladora inteira de uma vez pelo assistente de mapeamento;
 - diagnosticar o que a controladora envia e salvar o relatório em arquivo;
@@ -140,5 +142,30 @@ própria ou apenas altera as mensagens dos demais controles.
 
 No Windows, ligue a controladora pelo cabo USB-C: o Java Sound não enxerga MIDI por
 Bluetooth sem uma porta virtual intermediária.
+
+## Piano
+
+A aba **Piano** mostra as notas que estão soando num teclado de 88 teclas, junto da lista
+das alturas — algo como `E · C · G`, começando pelo baixo, que é o que distingue um C de
+um C/E. Serve para identificar a harmonia em ensaio; não é um instrumento e não responde
+a cliques.
+
+O que aparece já reflete o que se ouve: as alturas saem com o tom aplicado, canais em
+mute não constam e a percussão fica de fora, porque acenderia o teclado inteiro sem dizer
+nada sobre a harmonia.
+
+O reconhecimento automático de acordes foi descartado de propósito. As mesmas notas
+nomeiam acordes diferentes conforme o contexto — Am7 ou C6 —, e sem saber a tonalidade
+não há como escolher entre uma altura e sua enarmonia. Listar o que soa não inventa nada
+que o programa não possa saber.
+
+## Sintetizador externo
+
+Arquivos MIDI feitos para uma marca costumam trazer comandos proprietários que confundem
+aparelhos de outra: um arquivo preparado para teclado Yamaha pode emudecer um módulo
+Roland por mais de um minuto. Em **Configurações → Saída MIDI → Compatibilidade do
+sintetizador** há dois ajustes para isso — barrar o SysEx de outros fabricantes, que vem
+ligado, e escolher qual reset enviar a cada música, que vem desligado porque a maioria
+dos arquivos já se inicializa sozinha.
 
 A saída de letras para um segundo monitor e os perfis de mixagem por música permanecem nas próximas etapas.

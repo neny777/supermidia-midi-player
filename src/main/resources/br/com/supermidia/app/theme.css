@@ -351,6 +351,34 @@
     -fx-padding: 12 2 0 2;
 }
 
+/* --- Tela do piano ------------------------------------------------------- */
+
+/* As alturas soando, em destaque: é a informação que se lê de relance para
+   identificar a harmonia, então tem peso maior que o teclado em si. */
+.sounding-notes-block {
+    -fx-background-color: #111925;
+    -fx-border-color: #222e3d;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 12 20;
+    -fx-max-width: 760px;
+}
+
+.sounding-notes-value {
+    -fx-text-fill: #f1613a;
+    -fx-font-size: 34px;
+    -fx-font-weight: 800;
+}
+
+/* Sem min-height: a altura vem do MainController, limitada ao que o teclado precisa
+   naquela largura. Um mínimo fixo passaria do teto em janelas estreitas. */
+.piano-keyboard-holder {
+    -fx-background-color: #0c131d;
+    -fx-border-color: #222e3d;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
 /* Subtítulo dentro de um cartão, para agrupar ajustes secundários sem criar
    um cartão novo — caso da compatibilidade de sintetizador na Saída MIDI. */
 .settings-subtitle {
@@ -616,16 +644,6 @@
     -fx-text-fill: #d3d9e2;
     -fx-font-family: "Consolas", monospace;
     -fx-font-size: 15px;
-}
-
-.chord-block {
-    -fx-min-width: 115px;
-}
-
-.chord-value {
-    -fx-text-fill: #f1613a;
-    -fx-font-size: 25px;
-    -fx-font-weight: 800;
 }
 
 .midi-connection-label {

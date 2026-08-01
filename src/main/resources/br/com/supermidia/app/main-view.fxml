@@ -97,8 +97,9 @@
                     </VBox>
                 </graphic>
             </ToggleButton>
-            <Button onAction="#handleOpenPiano"
-                    styleClass="nav-button" maxWidth="Infinity">
+            <ToggleButton fx:id="pianoNavButton"
+                          toggleGroup="$navigationGroup" onAction="#handleShowPiano"
+                          styleClass="nav-button" maxWidth="Infinity">
                 <graphic>
                     <VBox alignment="CENTER" spacing="4" mouseTransparent="true">
                         <Label text="♫" styleClass="nav-icon"/>
@@ -106,9 +107,9 @@
                     </VBox>
                 </graphic>
                 <tooltip>
-                    <Tooltip text="Abre o piano em uma janela separada."/>
+                    <Tooltip text="Mostra as notas em execução para identificar a harmonia."/>
                 </tooltip>
-            </Button>
+            </ToggleButton>
             <Region VBox.vgrow="ALWAYS"/>
             <ToggleButton fx:id="settingsNavButton"
                           toggleGroup="$navigationGroup" onAction="#handleShowSettings"
@@ -162,6 +163,24 @@
                               fillHeight="true" maxWidth="Infinity" VBox.vgrow="ALWAYS"/>
                     </VBox>
                 </HBox>
+            </VBox>
+
+            <VBox fx:id="pianoView" visible="false" managed="false" spacing="14"
+                  styleClass="content-area">
+                <VBox spacing="4">
+                    <Label text="PIANO" styleClass="eyebrow"/>
+                    <Label text="Notas em execução" styleClass="page-title"/>
+                    <Label text="Mostra o que está soando agora, já com o tom aplicado e sem os canais silenciados. A percussão fica de fora: ela acenderia o teclado inteiro sem dizer nada sobre a harmonia."
+                           wrapText="true" styleClass="page-subtitle"/>
+                </VBox>
+
+                <VBox alignment="CENTER" spacing="6" styleClass="sounding-notes-block">
+                    <Label text="SOANDO AGORA" styleClass="micro-label"/>
+                    <Label fx:id="soundingNotesLabel" text="—" styleClass="sounding-notes-value"/>
+                </VBox>
+
+                <VBox fx:id="pianoKeyboardHolder" VBox.vgrow="ALWAYS"
+                      styleClass="piano-keyboard-holder"/>
             </VBox>
 
             <VBox fx:id="playlistView" visible="false" managed="false" spacing="16"
@@ -455,14 +474,6 @@
                         <ToggleButton fx:id="automaticModeToggle" text="●" onAction="#handlePlaybackMode"
                                       styleClass="switch-toggle"/>
                     </VBox>
-                    <VBox alignment="CENTER" spacing="3" styleClass="toggle-block">
-                        <Label text="PRÉVIA" styleClass="micro-label"/>
-                        <ToggleButton text="●" disable="true" styleClass="switch-toggle">
-                            <tooltip>
-                                <Tooltip text="Função planejada para uma etapa futura."/>
-                            </tooltip>
-                        </ToggleButton>
-                    </VBox>
                 </HBox>
             </GridPane>
 
@@ -472,11 +483,6 @@
                         maxWidth="430" HBox.hgrow="ALWAYS"/>
                 <Label fx:id="durationTimeLabel" text="00:00" styleClass="time-label"/>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Separator orientation="VERTICAL"/>
-                <HBox alignment="CENTER" spacing="7" styleClass="chord-block">
-                    <Label text="ACORDE" styleClass="micro-label"/>
-                    <Label fx:id="chordValueLabel" text="—" styleClass="chord-value"/>
-                </HBox>
                 <Separator orientation="VERTICAL"/>
                 <HBox alignment="CENTER_LEFT" spacing="7" styleClass="midi-connection">
                     <Label fx:id="midiInputConnectionDot" text="●"

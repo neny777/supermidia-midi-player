@@ -13,7 +13,7 @@
   também para a próxima música e preservar `PANIC`.
 - Concentrar a inclusão de arquivos MIDI na tela Playlist.
 - Manter na navegação apenas Ao vivo, Playlist, Piano e Configurações.
-- Abrir o piano em janela separada, preparada para um segundo monitor.
+- Piano como aba de navegacao, no mesmo padrao de Playlist e Configuracoes.
 - Remover as telas independentes Mixer e Letras.
 - Exibir três frases sincronizadas na tela principal, todas com a mesma cor,
   tamanho e peso, mantendo a frase atual na posição central.
@@ -25,9 +25,7 @@
 - Iniciar o volume geral em 100%.
 - Usar apenas um controle `Autoplay`: desligado significa avanço manual e a
   última opção escolhida deve ser restaurada na próxima execução.
-- Reservar `Prévia` para a futura reprodução de trechos configuráveis com transição suave.
 - Remover `Repetir` e a indicação textual `Tocando`.
-- Mostrar o acorde antes da saída MIDI no rodapé.
 - Limitar visualmente nomes longos de saída MIDI, preservando o nome completo em dica de mouse e Configurações.
 - Adicionar uma janela simples Sobre em Configurações.
 
@@ -41,14 +39,10 @@ diretamente a `Mixer · Alternar banco`. Se não aparecer, o Shift só altera as
 demais controles e o banco precisa de um botão próprio — é o que o layout de referência
 assume, com uma nota dedicada à troca de banco.
 
-### Acordes
+### Piano — concluído
 
-Implementar a análise de acordes em etapa própria, com filtragem do canal de bateria, estabilidade contra notas de passagem e consideração do transpose.
+Aba própria mostrando as notas em execução num teclado de 88 teclas, com a lista das
+alturas soando. Substitui o reconhecimento de acordes, que foi abandonado: as mesmas
+notas nomeiam acordes diferentes conforme o contexto, e listar o que soa não inventa
+nada que o algoritmo não possa saber.
 
-### Piano
-
-Implementar a visualização das notas ativas na janela separada e persistir posição, tamanho, monitor e visibilidade.
-
-### Prévia
-
-Implementar a reprodução de uma quantidade configurável de segundos de cada MIDI, com fade na troca das músicas.

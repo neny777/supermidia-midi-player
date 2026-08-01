@@ -172,6 +172,33 @@ public final class MidiTransformReceiver implements Receiver {
         silenceNewlyMutedChannels(previousState);
     }
 
+    /**
+     * Notas que estão soando neste instante, na altura em que saem para o sintetizador.
+     *
+     * <p>O resultado já reflete o que o ouvinte escuta, e não o que está escrito no
+     * arquivo: as alturas são as de saída, portanto <strong>com o transpose aplicado</strong>,
+     * e canais silenciados por mute ou solo não constam, porque suas notas nunca chegam a
+     * ser registradas.</p>
+     *
+     * @param includePercussion se o canal de percussão entra; para leitura de harmonia
+     *                          ele é ruído e deve ficar de fora
+     * @return vetor de 128 posições, {@code true} onde a nota está soando
+     */
+    public synchronized boolean[] soundingNotes(boolean includePercussion) {
+        boolean[] sounding = new boolean[MIDI_NOTES];
+        for (int channel = 0; channel < MIDI_CHANNELS; channel++) {
+            if (!includePercussion && channel == PERCUSSION_CHANNEL) {
+                continue;
+            }
+            for (int outputNote : activeOutputNotes[channel]) {
+                if (outputNote >= 0) {
+                    sounding[outputNote] = true;
+                }
+            }
+        }
+        return sounding;
+    }
+
     public synchronized boolean isChannelActive(int channel, long activityWindowMillis) {
         requireChannel(channel);
         long lastActivity = lastActivityNanos[channel];
