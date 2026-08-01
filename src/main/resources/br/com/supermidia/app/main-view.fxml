@@ -175,7 +175,8 @@
                 </VBox>
 
                 <VBox alignment="CENTER" spacing="6" styleClass="sounding-notes-block">
-                    <Label text="SOANDO AGORA" styleClass="micro-label"/>
+                    <Label fx:id="soundingNotesCaption" text="SOANDO AGORA"
+                           styleClass="micro-label"/>
                     <Label fx:id="soundingNotesLabel" text="—" styleClass="sounding-notes-value"/>
                 </VBox>
 

@@ -11,7 +11,7 @@ Os pacotes gerados são autocontidos: quem for utilizar o programa não precisa 
 1. No projeto, dê dois cliques em `package-windows-portable.bat`.
 2. Aguarde a mensagem de conclusão.
 3. Abra a pasta `build\packages\windows`.
-4. Descompacte `SuperMidia-MIDI-Player-0.1.0-windows-x64.zip`.
+4. Descompacte `SuperMidia-MIDI-Player-1.0.0-windows-x64.zip`.
 5. Entre na pasta descompactada e execute `SuperMidia MIDI Player.exe`.
 
 O pacote portátil pode ser copiado para outro computador Windows. A pasta inteira deve ser mantida; não copie apenas o arquivo `.exe`.
@@ -57,7 +57,7 @@ chmod +x gradlew package-ubuntu.sh
 O arquivo `.deb` será criado em `build/packages/linux`. Para instalá-lo:
 
 ```bash
-sudo apt install ./build/packages/linux/supermidia-midi-player_0.1.0-1_amd64.deb
+sudo apt install ./build/packages/linux/supermidia-midi-player_1.0.0-1_amd64.deb
 ```
 
 Se o nome gerado variar ligeiramente, use o nome exato mostrado na pasta `build/packages/linux`.

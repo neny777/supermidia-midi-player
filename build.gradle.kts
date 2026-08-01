@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "br.com.supermidia"
-version = "0.1.0"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -56,6 +56,12 @@ val linuxPackageDirectory = layout.buildDirectory.dir("packages/linux")
 val linuxIcon = layout.projectDirectory.file(
     "src/main/resources/br/com/supermidia/app/supermidia-logo.png"
 )
+// O Windows exige .ico, com as várias resoluções que o sistema usa em cada contexto;
+// o PNG do Linux não serve aqui. Sem este arquivo o jpackage aplica o ícone padrão
+// do Java, e o atalho aparece com o mascote da linguagem em vez da marca.
+val windowsIcon = layout.projectDirectory.file(
+    "src/main/resources/br/com/supermidia/app/supermidia-logo.ico"
+)
 val jpackageExecutable = javaToolchains.launcherFor {
     languageVersion = JavaLanguageVersion.of(21)
 }.map { launcher ->
@@ -89,7 +95,10 @@ val packageWindowsAppImage by tasks.registering(Exec::class) {
     dependsOn(cleanWindowsPackages, tasks.installDist)
     enabled = isWindows
     executable(jpackageExecutable.get())
-    args(commonJpackageArguments("app-image", windowsPackageDirectory.get().asFile.absolutePath))
+    args(
+        commonJpackageArguments("app-image", windowsPackageDirectory.get().asFile.absolutePath)
+            + listOf("--icon", windowsIcon.asFile.absolutePath)
+    )
 }
 
 val packageWindowsPortable by tasks.registering(Zip::class) {
@@ -117,6 +126,7 @@ tasks.register<Exec>("packageWindowsInstaller") {
         "--description", appDescription,
         "--dest", windowsPackageDirectory.get().dir("installer").asFile.absolutePath,
         "--app-image", windowsPackageDirectory.get().dir(appDisplayName).asFile.absolutePath,
+        "--icon", windowsIcon.asFile.absolutePath,
         "--win-per-user-install",
         "--win-dir-chooser",
         "--win-menu",

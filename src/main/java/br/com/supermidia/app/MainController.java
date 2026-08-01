@@ -191,6 +191,8 @@ public final class MainController {
     @FXML
     private VBox pianoKeyboardHolder;
     @FXML
+    private Label soundingNotesCaption;
+    @FXML
     private Label soundingNotesLabel;
 
     @FXML
@@ -323,6 +325,7 @@ public final class MainController {
     /** Pickup dos controles contínuos globais: tom, velocidade e volume geral. */
     private final Map<Slider, ControllerPickup> globalPickups = new HashMap<>();
     private PianoKeyboard pianoKeyboard;
+    private boolean[] pianoNotes = new boolean[128];
     private Timeline pianoTimeline;
 
     @FXML
@@ -454,18 +457,40 @@ public final class MainController {
         }
     }
 
+    /**
+     * Atualiza o piano, congelando o último acorde quando a reprodução para.
+     *
+     * <p>Pausar envia <em>All Notes Off</em> e zera as notas em execução — correto para o
+     * áudio, já que elas de fato pararam. Mas quem pausa está justamente querendo tempo
+     * para reconhecer o acorde, e a tela apagava antes disso. Enquanto não estiver
+     * tocando, o piano mantém o que mostrava.</p>
+     */
     private void refreshPiano() {
-        boolean[] sounding = engine == null ? new boolean[128] : engine.soundingNotes();
-        pianoKeyboard.setSoundingNotes(sounding);
-        String names = SoundingNoteNames.format(sounding);
+        boolean playing = engine != null && engine.isRunning();
+        if (playing) {
+            pianoNotes = engine.soundingNotes();
+        }
+        pianoKeyboard.setSoundingNotes(pianoNotes);
+        String names = SoundingNoteNames.format(pianoNotes);
         soundingNotesLabel.setText(names.isEmpty() ? "—" : names);
+        // O rótulo avisa que aquilo não é mais o que está soando, e sim o que soava.
+        soundingNotesCaption.setText(
+                !playing && !names.isEmpty() ? "CONGELADO NA PAUSA" : "SOANDO AGORA");
+    }
+
+    /** Esvazia o piano: usado ao parar e ao trocar de música, onde congelar não faz sentido. */
+    private void clearPianoNotes() {
+        pianoNotes = new boolean[128];
+        if (pianoKeyboard != null && pianoView.isVisible()) {
+            refreshPiano();
+        }
     }
 
     @FXML
     private void handleShowAbout() {
         Alert about = new Alert(Alert.AlertType.INFORMATION);
         about.setTitle("Sobre o SuperMídia MIDI Player");
-        about.setHeaderText("SuperMídia MIDI Player · versão 0.1.0");
+        about.setHeaderText("SuperMídia MIDI Player · versão 1.0.0");
         about.setContentText("Player MIDI desenvolvido para apresentações ao vivo.\n\n"
                 + "SuperMídia Alfenas\n\n"
                 + "Desenvolvedor: Denis Antonio Rocha\n"
@@ -872,6 +897,8 @@ public final class MainController {
             progressSlider.setValue(0);
             currentTimeLabel.setText("00:00");
             refreshLyricsAtTick(0);
+            // Parar volta ao início: não há acorde a analisar, ao contrário da pausa.
+            clearPianoNotes();
             statusLabel.setText("PRONTA");
             updateTransportControls();
         }
@@ -900,6 +927,7 @@ public final class MainController {
         try {
             engine.load(item.path().toFile());
             resetSongAdjustments();
+            clearPianoNotes();
             playlist.select(index);
             loadMixer(item);
             loadLyrics(item);
