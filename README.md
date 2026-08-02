@@ -8,11 +8,15 @@ Os pacotes gerados são autocontidos: quem for utilizar o programa não precisa 
 
 ### Windows — pacote portátil
 
-1. No projeto, dê dois cliques em `package-windows-portable.bat`.
-2. Aguarde a mensagem de conclusão.
-3. Abra a pasta `build\packages\windows`.
-4. Descompacte `SuperMidia-MIDI-Player-1.0.0-windows-x64.zip`.
-5. Entre na pasta descompactada e execute `SuperMidia MIDI Player.exe`.
+1. Na pasta do projeto, execute:
+
+```powershell
+.\gradlew.bat packageWindowsPortable
+```
+
+2. Abra a pasta `build\packages\windows`.
+3. Descompacte `SuperMidia-MIDI-Player-1.0.0-windows-x64.zip`.
+4. Entre na pasta descompactada e execute `SuperMidia MIDI Player.exe`.
 
 O pacote portátil pode ser copiado para outro computador Windows. A pasta inteira deve ser mantida; não copie apenas o arquivo `.exe`.
 
@@ -22,8 +26,11 @@ Para montar um instalador tradicional, com atalhos no menu Iniciar e na área de
 
 Depois de instalar o WiX e reiniciar o terminal:
 
-1. Dê dois cliques em `package-windows-installer.bat`.
-2. O instalador será criado em `build\packages\windows\installer`.
+```powershell
+.\gradlew.bat packageWindowsInstaller
+```
+
+O instalador será criado em `build\packages\windows\installer`.
 
 O instalador deve ser gerado no próprio Windows. O `jpackage` não cria instaladores de outro sistema operacional.
 
@@ -50,8 +57,8 @@ jpackage --version
 Em seguida, dentro da pasta do projeto:
 
 ```bash
-chmod +x gradlew package-ubuntu.sh
-./package-ubuntu.sh
+chmod +x gradlew
+./gradlew packageUbuntuDeb
 ```
 
 O arquivo `.deb` será criado em `build/packages/linux`. Para instalá-lo:

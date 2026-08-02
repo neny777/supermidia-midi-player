@@ -9,7 +9,7 @@ Responda e escreva comentários, mensagens de commit e texto de interface em **p
 
 - Java 21 LTS, JavaFX 21, Gradle Wrapper, Java Sound MIDI, FXML + CSS
 - Projeto modular: `module-info.java` em `src/main/java`
-- Empacotamento com `jpackage` (scripts `package-*.bat` e `package-ubuntu.sh`)
+- Empacotamento com `jpackage`, pelas tarefas Gradle `packageWindowsPortable`, `packageWindowsInstaller` e `packageUbuntuDeb`
 - Desenvolvimento no Windows; o pacote Linux precisa ser gerado em uma máquina Linux
 - Repositório: https://github.com/neny777/supermidia-midi-player (branch `main`)
 
