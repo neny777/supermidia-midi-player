@@ -70,9 +70,10 @@ embute um "preset de fábrica" adivinhado. Existem dois caminhos legítimos:
 
 1. **Assistente de mapeamento** — aprende o que a controladora já envia, função por função.
 2. **Layout de referência** (`SmcMixerLayout`) — o player define o que espera receber e o
-   usuário programa a controladora uma vez com essa tabela. Faders em CC 20–27, master
-   CC 28, tom CC 29, velocidade CC 30, botões nas notas 36–61, tudo no canal 1. A faixa
-   CC 20–31 foi escolhida porque o General MIDI não a reserva para nada.
+   usuário programa a controladora uma vez com essa tabela. Tudo em Control Change, canal 1:
+   globais CC 0–10, knobs CC 11–18 (volume 11, velocidade 12, tom 13), faders CC 21–28,
+   botões M/S/R em CC 31–38, 41–48 e 51–58, quadrados CC 61–68. As faixas foram escolhidas
+   porque o General MIDI não as reserva para nada.
 
 Ao mexer no layout, mantenha `SmcMixerLayoutTest` verde: ele garante cobertura de todas as
 40 funções, ausência de controles repetidos e faders dentro da faixa livre.
@@ -88,23 +89,26 @@ ao vivo sem usar o knob contínuo de tom).
   0 ou 127 pode não ser alcançado. Por isso os faders do mixer usam *pickup* (`mixerPickupArmed`)
   em vez de salto direto.
 - Em modo DAW os faders enviam **pitch bend** e os encoders usam protocolo relativo próprio.
-  `MidiBinding` já trata pitch bend como contínuo absoluto de 14 bits.
+  `MidiBinding` já trata pitch bend como contínuo absoluto de 14 bits. O mapa em uso é todo
+  em CC absoluto, inclusive os knobs, então o assistente aprender contínuo como `ABSOLUTE`
+  está correto — a sugestão `RELATIVE` de `MidiInputDiagnostics` só valeria no modo DAW.
 - Os LEDs têm mapeamento de notas fixo no firmware e não respondem a realimentação MIDI do
   host em modo CC. Não há feedback visual bidirecional.
+- Os botões **BT e Shift não enviam mensagem própria** — só alteram as mensagens dos demais
+  controles. Por isso o Shift não pode virar botão de banco, e a troca entre 1–8 e 9–16 usa
+  controles dedicados (`BANK_PREVIOUS_CC`, `BANK_NEXT_CC`, `BANK_TOGGLE_CC` em
+  `SmcMixerLayout`).
 
 ## Pendências
 
-- **Banco 1–8 / 9–16 e o botão Shift** — descobrir, pelo diagnóstico, se o Shift envia
-  mensagem própria (vira botão de banco) ou apenas altera as mensagens dos demais controles
-  (o banco precisa de botão dedicado, como assume o layout de referência).
-- **Modo relativo no assistente** — `MidiInputDiagnostics` já sugere `RELATIVE`, mas o
-  assistente sempre aprende contínuos como `ABSOLUTE`. Se os encoders forem relativos,
-  usar a sugestão do diagnóstico.
-- **Letras em segundo monitor** — janela separada, com posição, tamanho e monitor persistidos.
-- **Perfis de mixagem por música**.
+Nenhuma em aberto.
 
 ### Abandonados
 
+- **Perfis de mixagem por música** — cancelado pelo Denis. O arquivo MIDI já vem pré-mixado;
+  a controladora serve para modificar a mixagem ao vivo, e esse ajuste não precisa ser salvo.
+  É também o motivo de `resetSongAdjustments` zerar tom e velocidade a cada música.
+- **Letras em segundo monitor** — cancelado pelo Denis. Não há necessidade de uso.
 - **Acordes** — o reconhecimento automático foi descartado. As mesmas notas nomeiam
   acordes diferentes conforme o contexto (Am7 ou C6), e sem tonalidade não há como
   escolher entre uma altura e sua enarmonia. Em vez de nomear com margem de erro, a

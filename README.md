@@ -175,4 +175,5 @@ sintetizador** há dois ajustes para isso — barrar o SysEx de outros fabricant
 ligado, e escolher qual reset enviar a cada música, que vem desligado porque a maioria
 dos arquivos já se inicializa sozinha.
 
-A saída de letras para um segundo monitor e os perfis de mixagem por música permanecem nas próximas etapas.
+A mixagem ajustada pela controladora é de uso ao vivo e não é salva: o arquivo MIDI já vem
+pré-mixado, e tom e velocidade voltam ao padrão a cada música.
