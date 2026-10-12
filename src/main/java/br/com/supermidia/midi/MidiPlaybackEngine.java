@@ -3,11 +3,13 @@ package br.com.supermidia.midi;
 import javax.sound.midi.InvalidMidiDataException;
 import javax.sound.midi.MetaMessage;
 import javax.sound.midi.MidiDevice;
+import javax.sound.midi.MidiEvent;
 import javax.sound.midi.MidiSystem;
 import javax.sound.midi.MidiUnavailableException;
 import javax.sound.midi.Receiver;
 import javax.sound.midi.Sequence;
 import javax.sound.midi.Sequencer;
+import javax.sound.midi.Track;
 import javax.sound.midi.Transmitter;
 import java.io.File;
 import java.io.IOException;
@@ -19,6 +21,9 @@ import java.util.Objects;
 
 public final class MidiPlaybackEngine implements AutoCloseable {
     private static final int END_OF_TRACK = 47;
+    private static final int SET_TEMPO = 0x51;
+    /** 120 BPM: o andamento que o MIDI assume quando o arquivo não declara nenhum. */
+    private static final float DEFAULT_TEMPO_MPQ = 500_000f;
 
     private final Sequencer sequencer;
     private final Transmitter transmitter;
@@ -152,6 +157,13 @@ public final class MidiPlaybackEngine implements AutoCloseable {
             transformReceiver.resetInstruments(resetMode);
         }
         sequencer.setSequence(sequence);
+        // O andamento inicial vai explicitamente, e não por conta do sequenciador: depois
+        // de um setSequence(null) — o que unload() faz, e é por onde passa abrir um arquivo
+        // clicado — ele deixa de reler o andamento da sequência nova, e a música entra
+        // tocando no andamento da anterior.
+        if (sequence.getDivisionType() == Sequence.PPQ) {
+            sequencer.setTempoInMPQ(initialTempoMpq(sequence));
+        }
         sequencer.setTempoFactor(tempoFactor);
         loadedFile = file;
         sequenceGeneration++;
@@ -373,6 +385,39 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         transformReceiver = null;
         outputDevice = null;
         releaseOutput(previousReceiver, previousDevice);
+    }
+
+    /**
+     * Andamento declarado no início do arquivo, em microssegundos por semínima.
+     *
+     * <p>Vale o evento de menor tique; sem nenhum, o padrão de 120 BPM do MIDI. Eventos
+     * de andamento no meio da música continuam por conta do sequenciador.</p>
+     */
+    static float initialTempoMpq(Sequence sequence) {
+        long earliest = Long.MAX_VALUE;
+        float tempo = DEFAULT_TEMPO_MPQ;
+        for (Track track : sequence.getTracks()) {
+            for (int index = 0; index < track.size(); index++) {
+                MidiEvent event = track.get(index);
+                // Os eventos de uma trilha vêm em ordem de tique: passou do melhor, acabou.
+                if (event.getTick() >= earliest) {
+                    break;
+                }
+                if (event.getMessage() instanceof MetaMessage meta && meta.getType() == SET_TEMPO) {
+                    byte[] data = meta.getData();
+                    if (data.length >= 3) {
+                        int mpq = ((data[0] & 0xFF) << 16)
+                                | ((data[1] & 0xFF) << 8)
+                                | (data[2] & 0xFF);
+                        if (mpq > 0) {
+                            earliest = event.getTick();
+                            tempo = mpq;
+                        }
+                    }
+                }
+            }
+        }
+        return tempo;
     }
 
     private synchronized void handleMetaMessage(MetaMessage message) {
