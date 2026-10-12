@@ -699,14 +699,32 @@ public final class MainController {
     @FXML
     private void handlePrevious() {
         if (playlist.hasPrevious()) {
-            loadPlaylistIndex(playlist.currentIndex() - 1);
+            goToPlaylistIndex(playlist.currentIndex() - 1);
         }
     }
 
     @FXML
     private void handleNext() {
         if (playlist.hasNext()) {
-            loadPlaylistIndex(playlist.currentIndex() + 1);
+            goToPlaylistIndex(playlist.currentIndex() + 1);
+        }
+    }
+
+    /**
+     * Troca de música pelos botões de avançar e voltar.
+     *
+     * <p>Com o Autoplay ligado a música já entra tocando. Ao vivo isso transforma o avançar
+     * da controladora em um gesto só, em vez de avançar e depois procurar o play. Com o
+     * Autoplay desligado a música apenas fica preparada, como antes.</p>
+     */
+    private void goToPlaylistIndex(int index) {
+        if (!loadPlaylistIndex(index)) {
+            return;
+        }
+        if (playbackMode == PlaybackMode.AUTOMATIC) {
+            engine.play();
+            statusLabel.setText("TOCANDO");
+            updateTransportControls();
         }
     }
 
