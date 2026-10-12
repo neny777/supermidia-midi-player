@@ -53,6 +53,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.util.Duration;
 
@@ -76,6 +77,24 @@ import java.util.function.IntFunction;
 import java.util.prefs.Preferences;
 
 public final class MainController {
+    /** Tipo de arquivo de um diálogo, para cada um lembrar a própria pasta. */
+    private enum DirectoryKind {
+        MIDI("midi"),
+        PLAYLIST("playlist"),
+        PROFILE("perfil"),
+        REPORT("relatorio");
+
+        private final String suffix;
+
+        DirectoryKind(String suffix) {
+            this.suffix = suffix;
+        }
+
+        private String preferenceKey() {
+            return "lastDirectory." + suffix;
+        }
+    }
+
     /** Recorte de funções que o assistente de mapeamento percorre em uma sessão. */
     public enum MappingScope {
         ALL("Tudo · transporte, gerais e mixer"),
@@ -132,6 +151,8 @@ public final class MainController {
     private static final String MIDI_OUTPUT_PREFERENCE_KEY = "midiOutputDevice";
     private static final String MIDI_BINDING_PREFERENCE_PREFIX = "midiBinding.";
     private static final String SYNTH_RESET_MODE_PREFERENCE_KEY = "synthResetMode";
+    private static final String REPERTOIRE_DIRECTORY_PREFERENCE_KEY = "repertoireDirectory";
+    private static final String LAST_PLAYLIST_PREFERENCE_KEY = "lastPlaylistFile";
     private static final String BLOCK_VENDOR_SYSEX_PREFERENCE_KEY = "blockVendorSysex";
     private static final long MIDI_INPUT_ACTIVITY_TIMEOUT_NANOS = 350_000_000L;
     private static final long MIDI_LEARN_RELEASE_TIMEOUT_NANOS = 400_000_000L;
@@ -160,6 +181,8 @@ public final class MainController {
     private ComboBox<SynthResetMode> synthResetModeComboBox;
     @FXML
     private CheckBox blockVendorSysexCheckBox;
+    @FXML
+    private Label repertoireDirectoryLabel;
     @FXML
     private Label midiOutputStatusLabel;
     @FXML
@@ -360,6 +383,8 @@ public final class MainController {
         }
         startProgressUpdates();
         refreshMidiInputs();
+        refreshRepertoireDirectoryLabel();
+        restoreLastPlaylist();
         updateTransportControls();
     }
 
@@ -505,11 +530,12 @@ public final class MainController {
     @FXML
     private void handleAddPlaylistItems() {
         FileChooser chooser = midiFileChooser("Adicionar músicas à playlist");
-        setInitialDirectory(chooser);
+        applyInitialDirectory(chooser, DirectoryKind.MIDI);
         List<File> selectedFiles = chooser.showOpenMultipleDialog(playlistListView.getScene().getWindow());
         if (selectedFiles == null || selectedFiles.isEmpty()) {
             return;
         }
+        rememberDirectory(DirectoryKind.MIDI, selectedFiles.getFirst());
 
         int previousSize = playlist.size();
         for (File file : selectedFiles) {
@@ -534,27 +560,57 @@ public final class MainController {
         chooser.setTitle("Abrir playlist");
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Playlists M3U", "*.m3u8", "*.m3u", "*.M3U8", "*.M3U"));
-        setInitialDirectory(chooser);
+        applyInitialDirectory(chooser, DirectoryKind.PLAYLIST);
         File selectedFile = chooser.showOpenDialog(playlistListView.getScene().getWindow());
         if (selectedFile == null) {
             return;
         }
+        rememberDirectory(DirectoryKind.PLAYLIST, selectedFile);
 
         try {
-            List<PlaylistItem> loadedItems = playlistFileService.load(selectedFile.toPath());
-            resetLoadedSong();
-            playlist.replaceAll(loadedItems);
-            currentPlaylistFile = selectedFile.toPath().toAbsolutePath().normalize();
-            playlistDirty = false;
-
-            int firstPlayable = firstExistingItemIndex();
-            if (firstPlayable >= 0) {
-                loadPlaylistIndex(firstPlayable);
-            }
-            refreshPlaylistView(firstPlayable);
+            applyPlaylistFile(selectedFile.toPath());
         } catch (IOException | RuntimeException exception) {
             showError("Não foi possível abrir a playlist",
                     "O arquivo selecionado não pôde ser lido.", exception);
+        }
+    }
+
+    /** Carrega a playlist do caminho dado e a registra como a última usada. */
+    private void applyPlaylistFile(Path path) throws IOException {
+        List<PlaylistItem> loadedItems = playlistFileService.load(path);
+        resetLoadedSong();
+        playlist.replaceAll(loadedItems);
+        currentPlaylistFile = path.toAbsolutePath().normalize();
+        playlistDirty = false;
+        savePreference(LAST_PLAYLIST_PREFERENCE_KEY, currentPlaylistFile.toString());
+
+        int firstPlayable = firstExistingItemIndex();
+        if (firstPlayable >= 0) {
+            loadPlaylistIndex(firstPlayable);
+        }
+        refreshPlaylistView(firstPlayable);
+    }
+
+    /**
+     * Reabre a playlist da última sessão, já com a primeira música preparada.
+     *
+     * <p>Falha em silêncio de propósito: na abertura do programa, um erro sobre um arquivo
+     * que ninguém pediu agora só atrapalha. Se a playlist sumiu ou não pôde ser lida, a
+     * lembrança é descartada e o player abre vazio, como antes.</p>
+     */
+    private void restoreLastPlaylist() {
+        String stored = loadPreference(LAST_PLAYLIST_PREFERENCE_KEY);
+        if (stored == null || stored.isBlank()) {
+            return;
+        }
+        Path path = Path.of(stored);
+        if (!Files.isRegularFile(path)) {
+            return;
+        }
+        try {
+            applyPlaylistFile(path);
+        } catch (IOException | RuntimeException exception) {
+            removePreference(LAST_PLAYLIST_PREFERENCE_KEY);
         }
     }
 
@@ -570,11 +626,12 @@ public final class MainController {
             chooser.setInitialFileName("repertorio.m3u8");
             chooser.getExtensionFilters().add(
                     new FileChooser.ExtensionFilter("Playlist M3U8", "*.m3u8"));
-            setInitialDirectory(chooser);
+            applyInitialDirectory(chooser, DirectoryKind.PLAYLIST);
             File selectedFile = chooser.showSaveDialog(playlistListView.getScene().getWindow());
             if (selectedFile == null) {
                 return;
             }
+            rememberDirectory(DirectoryKind.PLAYLIST, selectedFile);
             destination = ensureM3u8Extension(selectedFile.toPath());
         }
 
@@ -582,6 +639,7 @@ public final class MainController {
             playlistFileService.save(destination, playlist.items());
             currentPlaylistFile = destination.toAbsolutePath().normalize();
             playlistDirty = false;
+            savePreference(LAST_PLAYLIST_PREFERENCE_KEY, currentPlaylistFile.toString());
             updatePlaylistFileLabel();
         } catch (IOException exception) {
             showError("Não foi possível salvar a playlist",
@@ -1284,10 +1342,12 @@ public final class MainController {
         chooser.setInitialFileName("diagnostico-controladora.txt");
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Arquivo de texto", "*.txt"));
+        applyInitialDirectory(chooser, DirectoryKind.REPORT);
         File target = chooser.showSaveDialog(settingsWindow());
         if (target == null) {
             return;
         }
+        rememberDirectory(DirectoryKind.REPORT, target);
         try {
             Files.writeString(target.toPath(),
                     midiDiagnostics.report(currentMidiInputName()), StandardCharsets.UTF_8);
@@ -1324,10 +1384,12 @@ public final class MainController {
         chooser.setInitialFileName("controladora" + ControllerProfile.FILE_EXTENSION);
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                 "Perfil de controladora", "*" + ControllerProfile.FILE_EXTENSION));
+        applyInitialDirectory(chooser, DirectoryKind.PROFILE);
         File target = chooser.showSaveDialog(settingsWindow());
         if (target == null) {
             return;
         }
+        rememberDirectory(DirectoryKind.PROFILE, target);
 
         Map<String, MidiBinding> ordered = new LinkedHashMap<>();
         for (MidiLearnAction action : midiLearnActions) {
@@ -1356,10 +1418,12 @@ public final class MainController {
         chooser.setTitle("Importar perfil da controladora");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                 "Perfil de controladora", "*" + ControllerProfile.FILE_EXTENSION));
+        applyInitialDirectory(chooser, DirectoryKind.PROFILE);
         File source = chooser.showOpenDialog(settingsWindow());
         if (source == null) {
             return;
         }
+        rememberDirectory(DirectoryKind.PROFILE, source);
 
         try {
             Optional<ControllerProfile> profile = ControllerProfile.load(source.toPath());
@@ -2399,15 +2463,100 @@ public final class MainController {
         return chooser;
     }
 
-    private void setInitialDirectory(FileChooser chooser) {
-        File directory = null;
-        if (currentPlaylistFile != null && currentPlaylistFile.getParent() != null) {
-            directory = currentPlaylistFile.getParent().toFile();
-        } else if (engine != null && engine.getLoadedFile() != null) {
-            directory = engine.getLoadedFile().getParentFile();
+    /**
+     * Faz o diálogo abrir onde você parou, em vez de na raiz.
+     *
+     * <p>A ordem é da pista mais específica para a mais genérica: a última pasta usada
+     * neste tipo de arquivo, depois a pasta da playlist ou da música aberta agora, depois
+     * a pasta de repertório configurada. Sem nenhuma delas o sistema escolhe, que era o
+     * comportamento antigo.</p>
+     *
+     * <p>Cada tipo tem memória própria de propósito: com uma chave só, exportar um perfil
+     * para outra pasta jogaria o próximo "adicionar MIDIs" para lá.</p>
+     */
+    private void applyInitialDirectory(FileChooser chooser, DirectoryKind kind) {
+        File[] candidates = {
+                storedDirectory(kind.preferenceKey()),
+                sessionDirectory(),
+                storedDirectory(REPERTOIRE_DIRECTORY_PREFERENCE_KEY)};
+        for (File candidate : candidates) {
+            if (candidate != null && candidate.isDirectory()) {
+                chooser.setInitialDirectory(candidate);
+                return;
+            }
         }
-        if (directory != null && directory.isDirectory()) {
-            chooser.setInitialDirectory(directory);
+    }
+
+    /** Pasta da playlist aberta ou da música carregada. */
+    private File sessionDirectory() {
+        if (currentPlaylistFile != null && currentPlaylistFile.getParent() != null) {
+            return currentPlaylistFile.getParent().toFile();
+        }
+        if (engine != null && engine.getLoadedFile() != null) {
+            return engine.getLoadedFile().getParentFile();
+        }
+        return null;
+    }
+
+    /**
+     * Lê uma pasta guardada nas preferências, ou {@code null}.
+     *
+     * <p>A pasta pode ter deixado de existir — o repertório fica em pasta sincronizada,
+     * que muda de caminho entre máquinas. Caminho morto é tratado como ausente, para cair
+     * no próximo candidato em vez de o diálogo voltar à raiz sem explicação.</p>
+     */
+    private File storedDirectory(String preferenceKey) {
+        String stored = loadPreference(preferenceKey);
+        if (stored == null || stored.isBlank()) {
+            return null;
+        }
+        File directory = new File(stored);
+        return directory.isDirectory() ? directory : null;
+    }
+
+    @FXML
+    private void handleChooseRepertoireDirectory() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Escolher a pasta do repertório");
+        File current = storedDirectory(REPERTOIRE_DIRECTORY_PREFERENCE_KEY);
+        if (current != null) {
+            chooser.setInitialDirectory(current);
+        }
+        File chosen = chooser.showDialog(settingsWindow());
+        if (chosen == null) {
+            return;
+        }
+        savePreference(REPERTOIRE_DIRECTORY_PREFERENCE_KEY, chosen.getAbsolutePath());
+        refreshRepertoireDirectoryLabel();
+    }
+
+    @FXML
+    private void handleClearRepertoireDirectory() {
+        removePreference(REPERTOIRE_DIRECTORY_PREFERENCE_KEY);
+        refreshRepertoireDirectoryLabel();
+    }
+
+    private void refreshRepertoireDirectoryLabel() {
+        String stored = loadPreference(REPERTOIRE_DIRECTORY_PREFERENCE_KEY);
+        if (stored == null || stored.isBlank()) {
+            repertoireDirectoryLabel.setText("Nenhuma pasta definida.");
+        } else if (new File(stored).isDirectory()) {
+            repertoireDirectoryLabel.setText(stored);
+        } else {
+            // Dito em voz alta: pasta sincronizada troca de caminho, e um diálogo que volta
+            // à raiz sem motivo aparente é mais confuso do que o aviso.
+            repertoireDirectoryLabel.setText(stored + " · pasta não encontrada");
+        }
+    }
+
+    /** Guarda a pasta do arquivo escolhido como ponto de partida da próxima vez. */
+    private void rememberDirectory(DirectoryKind kind, File chosenFile) {
+        if (chosenFile == null) {
+            return;
+        }
+        File parent = chosenFile.getParentFile();
+        if (parent != null && parent.isDirectory()) {
+            savePreference(kind.preferenceKey(), parent.getAbsolutePath());
         }
     }
 

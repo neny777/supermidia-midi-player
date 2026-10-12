@@ -234,6 +234,20 @@
                     <content>
                         <VBox spacing="18">
                 <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Pasta do repertório" styleClass="settings-title"/>
+                    <Label text="Onde os diálogos de abrir e salvar começam quando não há nada aberto. Cada tipo de arquivo também lembra sozinho a última pasta que você usou."
+                           wrapText="true" styleClass="muted-label"/>
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <Button text="Escolher pasta" onAction="#handleChooseRepertoireDirectory"
+                                styleClass="primary-button"/>
+                        <Button text="Limpar" onAction="#handleClearRepertoireDirectory"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="repertoireDirectoryLabel" text="Nenhuma pasta definida."
+                           wrapText="true" styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
                     <Label text="Saída MIDI" styleClass="settings-title"/>
                     <Label text="Selecione o módulo ou sintetizador que receberá a reprodução."
                            styleClass="muted-label"/>
