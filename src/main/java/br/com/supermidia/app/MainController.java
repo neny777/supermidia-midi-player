@@ -1,5 +1,6 @@
 package br.com.supermidia.app;
 
+import br.com.supermidia.core.OpenedFileMode;
 import br.com.supermidia.core.PlaybackMode;
 import br.com.supermidia.lyrics.LyricLine;
 import br.com.supermidia.lyrics.MidiLyrics;
@@ -153,6 +154,7 @@ public final class MainController {
     private static final String SYNTH_RESET_MODE_PREFERENCE_KEY = "synthResetMode";
     private static final String REPERTOIRE_DIRECTORY_PREFERENCE_KEY = "repertoireDirectory";
     private static final String LAST_PLAYLIST_PREFERENCE_KEY = "lastPlaylistFile";
+    private static final String OPENED_FILE_MODE_PREFERENCE_KEY = "openedFileMode";
     private static final String BLOCK_VENDOR_SYSEX_PREFERENCE_KEY = "blockVendorSysex";
     private static final long MIDI_INPUT_ACTIVITY_TIMEOUT_NANOS = 350_000_000L;
     private static final long MIDI_LEARN_RELEASE_TIMEOUT_NANOS = 400_000_000L;
@@ -183,6 +185,10 @@ public final class MainController {
     private CheckBox blockVendorSysexCheckBox;
     @FXML
     private Label repertoireDirectoryLabel;
+    @FXML
+    private ComboBox<OpenedFileMode> openedFileModeComboBox;
+    @FXML
+    private Label openedFileModeLabel;
     @FXML
     private Label midiOutputStatusLabel;
     @FXML
@@ -324,6 +330,7 @@ public final class MainController {
     private final ToggleButton[] channelSoloButtons = new ToggleButton[MIDI_CHANNEL_COUNT];
 
     private PlaybackMode playbackMode = PlaybackMode.MANUAL;
+    private OpenedFileMode openedFileMode = OpenedFileMode.REPLACE;
     private MidiPlaybackEngine engine;
     private Timeline progressTimeline;
     private TranslateTransition lyricScrollTransition;
@@ -384,7 +391,7 @@ public final class MainController {
         startProgressUpdates();
         refreshMidiInputs();
         refreshRepertoireDirectoryLabel();
-        restoreLastPlaylist();
+        configureOpenedFileMode();
         updateTransportControls();
     }
 
@@ -589,6 +596,113 @@ public final class MainController {
             loadPlaylistIndex(firstPlayable);
         }
         refreshPlaylistView(firstPlayable);
+    }
+
+    private void configureOpenedFileMode() {
+        openedFileMode = OpenedFileMode.fromPreference(
+                loadPreference(OPENED_FILE_MODE_PREFERENCE_KEY));
+        openedFileModeComboBox.getItems().setAll(OpenedFileMode.values());
+        openedFileModeComboBox.getSelectionModel().select(openedFileMode);
+        openedFileModeLabel.setText(openedFileMode.description() + ".");
+    }
+
+    @FXML
+    private void handleOpenedFileMode() {
+        OpenedFileMode selection = openedFileModeComboBox.getSelectionModel().getSelectedItem();
+        if (selection == null) {
+            return;
+        }
+        openedFileMode = selection;
+        savePreference(OPENED_FILE_MODE_PREFERENCE_KEY, selection.name());
+        openedFileModeLabel.setText(selection.description() + ".");
+    }
+
+    /**
+     * Abre um arquivo entregue por outra cópia do player, que encerrou em seguida.
+     *
+     * <p>Quem chama vem da thread de atendimento de {@link SingleInstance} e já
+     * devolveu o trabalho à thread da interface.</p>
+     */
+    public void openFromOtherInstance(String parameter) {
+        Path path = existingFile(parameter);
+        if (path != null) {
+            openClickedFile(path);
+        }
+    }
+
+    /**
+     * Decide o que abrir ao iniciar.
+     *
+     * <p>Um arquivo recebido na linha de comando vence a playlist da última sessão: é o
+     * caminho de quem clicou num MIDI no Explorer, e restaurar o repertório antes só
+     * carregaria uma música para descartá-la em seguida.</p>
+     */
+    public void openAtStartup(List<String> parameters) {
+        Path clicked = null;
+        for (String parameter : parameters) {
+            clicked = existingFile(parameter);
+            if (clicked != null) {
+                break;
+            }
+        }
+        if (clicked == null) {
+            restoreLastPlaylist();
+            return;
+        }
+        // Acrescentar supõe uma playlist a que acrescentar: o repertório da última
+        // sessão volta primeiro, e o arquivo clicado entra no fim dele.
+        boolean restored = openedFileMode == OpenedFileMode.APPEND;
+        if (restored) {
+            restoreLastPlaylist();
+        }
+        if (!openClickedFile(clicked) && !restored) {
+            restoreLastPlaylist();
+        }
+    }
+
+    private Path existingFile(String parameter) {
+        try {
+            Path path = Path.of(parameter).toAbsolutePath().normalize();
+            return Files.isRegularFile(path) ? path : null;
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Abre um arquivo clicado fora do programa.
+     *
+     * <p>Playlist entra como playlist. MIDI entra sozinho: a lista em memória passa a ter
+     * só ele, sem marcar alteração pendente e sem mexer na lembrança da última playlist.
+     * Clicar num arquivo é "toca só esta", e na próxima abertura normal o repertório volta
+     * inteiro. O play obedece ao Autoplay, como ao avançar música.</p>
+     */
+    private boolean openClickedFile(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (name.endsWith(".m3u8") || name.endsWith(".m3u")) {
+            try {
+                applyPlaylistFile(path);
+                return true;
+            } catch (IOException | RuntimeException exception) {
+                return false;
+            }
+        }
+        if (!name.endsWith(".mid") && !name.endsWith(".midi") && !name.endsWith(".kar")) {
+            return false;
+        }
+        if (openedFileMode == OpenedFileMode.APPEND && !playlist.isEmpty()) {
+            int index = playlist.add(path);
+            markPlaylistModified();
+            goToPlaylistIndex(index);
+            return true;
+        }
+        resetLoadedSong();
+        playlist.replaceAll(List.of(new PlaylistItem(path)));
+        currentPlaylistFile = null;
+        playlistDirty = false;
+        updatePlaylistFileLabel();
+        goToPlaylistIndex(0);
+        return true;
     }
 
     /**

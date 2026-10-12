@@ -1,6 +1,7 @@
 package br.com.supermidia.app;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -64,6 +65,27 @@ public final class SuperMidiaApplication extends Application {
         restoreWindowBounds(stage);
         trackRestoredBounds(stage);
         stage.show();
+
+        // Depois do show: abrir um arquivo mexe na interface, e a janela ja esta montada.
+        controller.openAtStartup(getParameters().getUnnamed());
+        SingleInstance.listen(parameter -> Platform.runLater(() -> {
+            controller.openFromOtherInstance(parameter);
+            bringToFront(stage);
+        }));
+    }
+
+    /**
+     * Traz a janela para a frente quando outra cópia entrega um arquivo.
+     *
+     * <p>Sem isto o arquivo abriria numa janela atrás das outras, e pareceria que o
+     * clique não fez nada.</p>
+     */
+    private void bringToFront(Stage stage) {
+        if (stage.isIconified()) {
+            stage.setIconified(false);
+        }
+        stage.toFront();
+        stage.requestFocus();
     }
 
     /**
@@ -167,6 +189,7 @@ public final class SuperMidiaApplication extends Application {
 
     @Override
     public void stop() {
+        SingleInstance.release();
         saveWindowBounds();
         if (controller != null) {
             controller.shutdown();
@@ -174,6 +197,15 @@ public final class SuperMidiaApplication extends Application {
     }
 
     public static void main(String[] args) {
+        // Uma cópia só: duas disputam o dispositivo de saída e a segunda fica muda.
+        // Se a entrega falhar, abrir duas janelas incomoda menos do que não abrir nenhuma.
+        if (!SingleInstance.acquire() && SingleInstance.handOff(args)) {
+            // Encerrar na marra, e não apenas voltar daqui. O lançador do Java sobe a
+            // thread de eventos do JavaFX antes de chamar este main; sem launch(), ela
+            // fica girando num laço vazio e o processo nunca morre — um fantasma sem
+            // janela, segurando porta e memória.
+            System.exit(0);
+        }
         launch(args);
     }
 }

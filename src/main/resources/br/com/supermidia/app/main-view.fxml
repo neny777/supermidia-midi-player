@@ -248,6 +248,16 @@
                 </VBox>
 
                 <VBox spacing="14" styleClass="settings-card">
+                    <Label text="Arquivo aberto de fora" styleClass="settings-title"/>
+                    <Label text="O que fazer quando você clica num MIDI no Explorer e manda abrir com o player. O arquivo começa a tocar se o Autoplay estiver ligado."
+                           wrapText="true" styleClass="muted-label"/>
+                    <ComboBox fx:id="openedFileModeComboBox" onAction="#handleOpenedFileMode"
+                              styleClass="device-combo" maxWidth="Infinity"/>
+                    <Label fx:id="openedFileModeLabel" text="" wrapText="true"
+                           styleClass="muted-label"/>
+                </VBox>
+
+                <VBox spacing="14" styleClass="settings-card">
                     <Label text="Saída MIDI" styleClass="settings-title"/>
                     <Label text="Selecione o módulo ou sintetizador que receberá a reprodução."
                            styleClass="muted-label"/>
