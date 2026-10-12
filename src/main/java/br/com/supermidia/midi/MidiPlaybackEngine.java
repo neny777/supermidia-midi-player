@@ -72,16 +72,17 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         if (sequencer.isRunning()) {
             pause();
         }
-        disconnectOutput();
         if (selection == null) {
+            disconnectOutput();
             return;
         }
 
         MidiDevice selectedDevice = MidiSystem.getMidiDevice(selection.info());
+        MidiTransformReceiver transformed;
         selectedDevice.open();
         try {
             Receiver receiver = selectedDevice.getReceiver();
-            MidiTransformReceiver transformed = new MidiTransformReceiver(receiver);
+            transformed = new MidiTransformReceiver(receiver);
             transformed.setBlockVendorSysex(blockVendorSysex);
             transformed.setTranspose(transpose);
             transformed.setMasterVolume(masterVolume);
@@ -93,13 +94,50 @@ public final class MidiPlaybackEngine implements AutoCloseable {
                 transformed.setChannelMuted(channel, mutedChannels[channel]);
                 transformed.setChannelSolo(channel, soloChannels[channel]);
             }
-            transmitter.setReceiver(transformed);
-            outputDevice = selectedDevice;
-            transformReceiver = transformed;
         } catch (MidiUnavailableException | RuntimeException exception) {
             selectedDevice.close();
             throw exception;
         }
+
+        // A saída antiga só é solta depois que a nova está de pé. Se a troca falhar — e o
+        // Microsoft GS Wavetable e o MIDI Mapper falham em algumas máquinas —, o som
+        // continua saindo por onde estava, em vez de a apresentação ficar muda.
+        MidiDevice previousDevice = outputDevice;
+        MidiTransformReceiver previousReceiver = transformReceiver;
+        transmitter.setReceiver(transformed);
+        outputDevice = selectedDevice;
+        transformReceiver = transformed;
+        releaseOutput(previousReceiver, previousDevice);
+    }
+
+    /**
+     * Solta a saída anterior fora da thread que pediu a troca.
+     *
+     * <p>Fechar o Gervill pode não voltar nunca: {@code SoftSynthesizer.close()} dá
+     * {@code join} na thread AudioPusher, e essa thread fica parada dentro de
+     * {@code DirectAudioDevice.write} quando a placa de som não drena o buffer. O
+     * {@code join} não tem prazo. Feito na thread da interface, isso congela a janela
+     * em definitivo — era o travamento ao trocar a saída MIDI.</p>
+     *
+     * <p>Aqui o novo dispositivo já está conectado e recebendo, então soltar o antigo é
+     * só limpeza: pode demorar o quanto quiser numa thread própria. Quando o dispositivo
+     * escolhido é o que já estava aberto, o Java Sound devolve a mesma instância, e o
+     * {@code close} apenas desfaz o {@code open} extra feito na troca.</p>
+     */
+    private static void releaseOutput(MidiTransformReceiver receiver, MidiDevice device) {
+        if (receiver == null && device == null) {
+            return;
+        }
+        Thread releaser = new Thread(() -> {
+            if (receiver != null) {
+                receiver.close();
+            }
+            if (device != null) {
+                device.close();
+            }
+        }, "supermidia-liberar-saida-midi");
+        releaser.setDaemon(true);
+        releaser.start();
     }
 
     public synchronized void load(File file)
@@ -306,24 +344,35 @@ public final class MidiPlaybackEngine implements AutoCloseable {
         playbackFinishedHandler = Objects.requireNonNull(handler, "handler");
     }
 
+    /**
+     * Encerra o motor sem depender do fechamento da saída.
+     *
+     * <p>{@code Application.stop()} roda na thread da interface, e fechar o Gervill ali
+     * pode nunca voltar — ver {@link #releaseOutput}. O resultado era a janela sumir e o
+     * processo continuar vivo, exigindo o gerenciador de tarefas. A liberação vai para uma
+     * thread daemon, que não segura o encerramento da JVM.</p>
+     */
     @Override
     public synchronized void close() {
         sequencer.stop();
-        disconnectOutput();
+        MidiDevice previousDevice = outputDevice;
+        MidiTransformReceiver previousReceiver = transformReceiver;
+        transmitter.setReceiver(null);
+        outputDevice = null;
+        transformReceiver = null;
+        releaseOutput(previousReceiver, previousDevice);
         transmitter.close();
         sequencer.close();
     }
 
+    /** Desliga a saída atual. A liberação é assíncrona pelo motivo em {@link #releaseOutput}. */
     private synchronized void disconnectOutput() {
+        MidiDevice previousDevice = outputDevice;
+        MidiTransformReceiver previousReceiver = transformReceiver;
         transmitter.setReceiver(null);
-        if (transformReceiver != null) {
-            transformReceiver.close();
-            transformReceiver = null;
-        }
-        if (outputDevice != null) {
-            outputDevice.close();
-            outputDevice = null;
-        }
+        transformReceiver = null;
+        outputDevice = null;
+        releaseOutput(previousReceiver, previousDevice);
     }
 
     private synchronized void handleMetaMessage(MetaMessage message) {

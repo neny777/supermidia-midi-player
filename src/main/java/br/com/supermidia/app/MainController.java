@@ -312,6 +312,8 @@ public final class MainController {
     private boolean playlistDirty;
     private boolean refreshingOutputs;
     private boolean refreshingInputs;
+    /** Saída que o motor tem conectada agora; serve para desfazer uma troca que falhou. */
+    private MidiOutputDevice connectedOutput;
     private long lastMidiInputActivityNanos;
     private MidiLearnAction learningMidiAction;
     private MidiBinding recentlyLearnedContinuousBinding;
@@ -747,7 +749,7 @@ public final class MainController {
             midiInputStatusLabel.setTooltip(null);
             midiInputMonitorLabel.setText("Não foi possível abrir o dispositivo de entrada.");
             setMidiInputConnected(false);
-            showError("Entrada MIDI indisponível",
+            showErrorLater("Entrada MIDI indisponível",
                     "O dispositivo pode estar sendo usado por outro programa.", exception);
         }
     }
@@ -796,6 +798,7 @@ public final class MainController {
         MidiOutputDevice selection = midiOutputComboBox.getSelectionModel().getSelectedItem();
         try {
             engine.selectOutput(selection);
+            connectedOutput = selection;
             String outputName = selection == null ? "desconectada" : selection.name();
             midiOutputStatusLabel.setText("Saída: " + outputName);
             midiOutputStatusLabel.setTooltip(new Tooltip("Saída MIDI: " + outputName));
@@ -806,14 +809,24 @@ public final class MainController {
             }
             updateTransportControls();
         } catch (MidiUnavailableException exception) {
-            midiOutputStatusLabel.setText("Saída: falha de conexão");
-            midiOutputStatusLabel.setTooltip(null);
+            // O motor preservou a saída anterior, então a lista volta para ela em vez de
+            // ficar vazia — o que aparentava desconexão depois de uma troca recusada.
             refreshingOutputs = true;
-            midiOutputComboBox.getSelectionModel().clearSelection();
+            if (connectedOutput == null) {
+                midiOutputComboBox.getSelectionModel().clearSelection();
+            } else {
+                midiOutputComboBox.getSelectionModel().select(connectedOutput);
+            }
             refreshingOutputs = false;
+            String keptName = connectedOutput == null ? "nenhuma" : connectedOutput.name();
+            midiOutputStatusLabel.setText("Saída: " + keptName + " · troca recusada");
+            midiOutputStatusLabel.setTooltip(null);
             updateTransportControls();
-            showError("Saída MIDI indisponível",
-                    "O dispositivo pode estar sendo usado por outro programa.", exception);
+            showErrorLater("Saída MIDI indisponível",
+                    "O dispositivo pode estar sendo usado por outro programa."
+                            + (connectedOutput == null ? ""
+                                    : "\n\nA saída continua em " + connectedOutput.name() + "."),
+                    exception);
         }
     }
 
@@ -2401,6 +2414,19 @@ public final class MainController {
     private Path ensureM3u8Extension(Path path) {
         String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
         return fileName.endsWith(".m3u8") ? path : Path.of(path.toString() + ".m3u8");
+    }
+
+    /**
+     * Mostra o erro no próximo pulso da interface, em vez de agora.
+     *
+     * <p>Usado pelos handlers de seleção dos ComboBox de entrada e saída MIDI.
+     * {@code showAndWait} abre um laço de eventos aninhado; disparado de dentro do handler,
+     * com o popup da lista ainda fechando, o popup continua segurando o mouse e a janela
+     * congela — era o travamento ao trocar a saída MIDI. Adiar tira o diálogo de dentro
+     * do evento de seleção.</p>
+     */
+    private void showErrorLater(String title, String message, Exception exception) {
+        Platform.runLater(() -> showError(title, message, exception));
     }
 
     private void showError(String title, String message, Exception exception) {
